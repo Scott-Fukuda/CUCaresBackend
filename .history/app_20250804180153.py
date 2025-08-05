@@ -105,36 +105,6 @@ def register_user_for_organization():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/unregister-org', methods=['POST'])
-def unregister_user_from_organization():
-    """Unregister a user from an organization"""
-    data = request.get_json()
-    user_id = data.get('user_id')
-    organization_id = data.get('organization_id')
-
-    if not user_id or not organization_id:
-        return jsonify({"error": "user_id and organization_id are required"}), 400
-
-    user = User.query.get(user_id)
-    organization = Organization.query.get(organization_id)
-
-    if not user or not organization:
-        return jsonify({"error": "Invalid user_id or organization_id"}), 404
-
-    # Check if user is registered with the organization
-    if organization not in user.organizations:
-        return jsonify({"message": "User not registered with this organization"}), 200
-
-    try:
-        # Remove the relationship
-        user.organizations.remove(organization)
-        organization.member_count = max(0, organization.member_count - 1)  # Prevent negative count
-        db.session.commit()
-        return jsonify({"message": "Unregistration successful"}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/api/attendance', methods=['PUT'])
 def marked_as_attended():
     data = request.get_json()

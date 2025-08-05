@@ -56,16 +56,6 @@ class User(db.Model):
     opportunities_hosted = db.relationship(
         "Opportunity", 
         back_populates="host_user"
-    )
-
-    # Friends relationship (self-referential many-to-many)
-    friends = db.relationship(
-        "User",
-        secondary=user_friends,
-        primaryjoin=(user_friends.c.user_id == id),
-        secondaryjoin=(user_friends.c.friend_id == id),
-        backref=db.backref("friend_of", lazy="dynamic"),
-        lazy="dynamic"
     )  
 
     def __init__(self, **kwargs):
@@ -90,13 +80,6 @@ class User(db.Model):
                     "registered": uo.registered,
                     "attended": uo.attended,
                 } for uo in self.user_opportunities
-            ],
-            "friends": [
-                {
-                    "id": friend.id,
-                    "name": friend.name,
-                    "profile_image": friend.profile_image
-                } for friend in self.friends
             ]
         }
 

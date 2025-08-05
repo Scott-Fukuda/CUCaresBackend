@@ -28,13 +28,6 @@ organization_opportunity = db.Table(
     db.Column("opportunity_id", db.Integer, db.ForeignKey("opportunity.id"), primary_key=True)
 )
 
-# Friends association table (self-referential many-to-many)
-user_friends = db.Table(
-    "user_friends",
-    db.Column("user_id", db.Integer, db.ForeignKey("user.id"), primary_key=True),
-    db.Column("friend_id", db.Integer, db.ForeignKey("user.id"), primary_key=True)
-)
-
 class User(db.Model):
     __tablename__ = "user"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)    
@@ -56,16 +49,6 @@ class User(db.Model):
     opportunities_hosted = db.relationship(
         "Opportunity", 
         back_populates="host_user"
-    )
-
-    # Friends relationship (self-referential many-to-many)
-    friends = db.relationship(
-        "User",
-        secondary=user_friends,
-        primaryjoin=(user_friends.c.user_id == id),
-        secondaryjoin=(user_friends.c.friend_id == id),
-        backref=db.backref("friend_of", lazy="dynamic"),
-        lazy="dynamic"
     )  
 
     def __init__(self, **kwargs):
@@ -90,13 +73,6 @@ class User(db.Model):
                     "registered": uo.registered,
                     "attended": uo.attended,
                 } for uo in self.user_opportunities
-            ],
-            "friends": [
-                {
-                    "id": friend.id,
-                    "name": friend.name,
-                    "profile_image": friend.profile_image
-                } for friend in self.friends
             ]
         }
 
@@ -131,7 +107,6 @@ class Organization(db.Model):
         self.type = kwargs.get("type")
         self.points = kwargs.get("points", 0)
         self.host_user_id = kwargs.get("host_user_id")
-        self.approved = kwargs.get("approved", False)
 
     def serialize(self):
         return {
@@ -142,7 +117,6 @@ class Organization(db.Model):
             "type": self.type,
             "points": self.points,
             "host_user_id": self.host_user_id,
-            "approved": self.approved,
             "users": [
                 { 
                     "name": user.name,

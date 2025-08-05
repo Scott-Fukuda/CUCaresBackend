@@ -90,13 +90,6 @@ class User(db.Model):
                     "registered": uo.registered,
                     "attended": uo.attended,
                 } for uo in self.user_opportunities
-            ],
-            "friends": [
-                {
-                    "id": friend.id,
-                    "name": friend.name,
-                    "profile_image": friend.profile_image
-                } for friend in self.friends
             ]
         }
 

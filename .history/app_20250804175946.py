@@ -25,10 +25,10 @@ with app.app_context():
     db.create_all()
 
     # # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
-    # User.__table__.drop(db.engine)
-    # Opportunity.__table__.drop(db.engine)
-    # Organization.__table__.drop(db.engine)
-    # UserOpportunity.__table__.drop(db.engine)
+    User.__table__.drop(db.engine)
+    Opportunity.__table__.drop(db.engine)
+    Organization.__table__.drop(db.engine)
+    UserOpportunity.__table__.drop(db.engine)
 
 
 # Helper function to handle pagination
@@ -101,36 +101,6 @@ def register_user_for_organization():
         organization.member_count += 1
         db.session.commit()
         return jsonify({"message": "Registration successful"}), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/unregister-org', methods=['POST'])
-def unregister_user_from_organization():
-    """Unregister a user from an organization"""
-    data = request.get_json()
-    user_id = data.get('user_id')
-    organization_id = data.get('organization_id')
-
-    if not user_id or not organization_id:
-        return jsonify({"error": "user_id and organization_id are required"}), 400
-
-    user = User.query.get(user_id)
-    organization = Organization.query.get(organization_id)
-
-    if not user or not organization:
-        return jsonify({"error": "Invalid user_id or organization_id"}), 404
-
-    # Check if user is registered with the organization
-    if organization not in user.organizations:
-        return jsonify({"message": "User not registered with this organization"}), 200
-
-    try:
-        # Remove the relationship
-        user.organizations.remove(organization)
-        organization.member_count = max(0, organization.member_count - 1)  # Prevent negative count
-        db.session.commit()
-        return jsonify({"message": "Unregistration successful"}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -685,115 +655,6 @@ def delete_opportunity(opp_id):
             'message': 'Failed to delete opportunity',
             'error': str(e)
         }), 500
-
-
-# Friends Endpoints
-@app.route('/api/users/<int:user_id>/friends', methods=['GET'])
-def get_user_friends(user_id):
-    """Get all friends of a user"""
-    try:
-        user = User.query.get_or_404(user_id)
-        friends = user.friends.all()
-        
-        return jsonify({
-            'friends': [
-                {
-                    'id': friend.id,
-                    'name': friend.name,
-                    'profile_image': friend.profile_image,
-                    'points': friend.points
-                } for friend in friends
-            ]
-        })
     
-    except Exception as e:
-        return jsonify({
-            'message': 'Failed to fetch friends',
-            'error': str(e)
-        }), 500
-
-
-@app.route('/api/users/<int:user_id>/friends', methods=['POST'])
-def add_friend(user_id):
-    """Add a friend to a user"""
-    try:
-        data = request.get_json()
-        friend_id = data.get('friend_id')
-        
-        if not friend_id:
-            return jsonify({'error': 'friend_id is required'}), 400
-        
-        user = User.query.get_or_404(user_id)
-        friend = User.query.get_or_404(friend_id)
-        
-        # Check if they're already friends
-        if friend in user.friends:
-            return jsonify({'message': 'Already friends'}), 200
-        
-        # Check if trying to add self as friend
-        if user_id == friend_id:
-            return jsonify({'error': 'Cannot add yourself as friend'}), 400
-        
-        # Add friend (this will automatically add the reverse relationship)
-        user.friends.append(friend)
-        db.session.commit()
-        
-        return jsonify({'message': 'Friend added successfully'}), 201
-    
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({
-            'message': 'Failed to add friend',
-            'error': str(e)
-        }), 500
-
-
-@app.route('/api/users/<int:user_id>/friends/<int:friend_id>', methods=['DELETE'])
-def remove_friend(user_id, friend_id):
-    """Remove a friend from a user"""
-    try:
-        user = User.query.get_or_404(user_id)
-        friend = User.query.get_or_404(friend_id)
-        
-        # Check if they're friends
-        if friend not in user.friends:
-            return jsonify({'message': 'Not friends'}), 200
-        
-        # Remove friend (this will automatically remove the reverse relationship)
-        user.friends.remove(friend)
-        db.session.commit()
-        
-        return jsonify({'message': 'Friend removed successfully'}), 200
-    
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({
-            'message': 'Failed to remove friend',
-            'error': str(e)
-        }), 500
-
-
-@app.route('/api/users/<int:user_id>/friends/check/<int:friend_id>', methods=['GET'])
-def check_friendship(user_id, friend_id):
-    """Check if two users are friends"""
-    try:
-        user = User.query.get_or_404(user_id)
-        friend = User.query.get_or_404(friend_id)
-        
-        are_friends = friend in user.friends
-        
-        return jsonify({
-            'are_friends': are_friends,
-            'user_id': user_id,
-            'friend_id': friend_id
-        })
-    
-    except Exception as e:
-        return jsonify({
-            'message': 'Failed to check friendship',
-            'error': str(e)
-        }), 500
-
-
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=True)
