@@ -705,6 +705,9 @@ def create_opportunity():
             duration=data['duration'],
             cause=data.get('cause'),
             completed=data.get('completed', False),
+            nonprofit=data.get('nonprofit'),
+            total_slots=data.get('total_slots'),
+            image_url=data.get('image_url'),
             host_org_id=data['host_org_id'],
             host_user_id=data['host_user_id']
         )
@@ -779,7 +782,7 @@ def update_opportunity(opp_id):
 
         
         # Only update fields that exist in the model
-        valid_fields = ['name', 'description', 'date', 'completed', 
+        valid_fields = ['name', 'description', 'date', 'completed', 'nonprofit', 'total_slots', 'image_url',
                        'host_org_id', 'host_user_id']       
         
         for field in valid_fields:
