@@ -789,30 +789,28 @@ def update_opportunity(opp_id):
                     setattr(opp, field, new_date)
                 elif(field == 'host_org_id'): # if host org changes, update this in other models
                     new_host_org_id = data['host_org_id']
-                    old_host_org_id = opp.host_org_id
-                    
-                    # Check if new organization exists
-                    new_org = Organization.query.get(new_host_org_id)
-                    if not new_org:
+                    old_host_org_id = opp.host_user_id
+                    if not Organization.query.get(old_host_org_id):
                         return jsonify({
-                            'message': 'Host organization does not exist',
-                            'error': f'Organization with ID {new_host_org_id} not found'
-                        }), 404
+                            'message': 'Host org does not exist'
+                        })  
                     
-                    # Simply update the host_org_id field
-                    setattr(opp, field, new_host_org_id)
+                    if new_host_org_id != old_host_org_id:
+                        old_org = Organization.query.get(old_host_user_id)
+                        new_org = Organization.query.get(new_host_user_id)
+
+                        opp.participating_organizations.append(new_org)
+                        opp.participating_organizations.remove(old_org)
+                        db.session.commit()
+                        setattr(opp, field, new_host_org_id)
                     
                 elif field == 'host_user_id':
                     new_host_user_id = data['host_user_id']
                     old_host_user_id = opp.host_user_id
-                    
-                    # Check if new user exists
-                    new_user = User.query.get(new_host_user_id)
-                    if not new_user:
+                    if not User.query.get(old_host_user_id):
                         return jsonify({
-                            'message': 'Host user does not exist',
-                            'error': f'User with ID {new_host_user_id} not found'
-                        }), 404   
+                            'message': 'Host user does not exist'
+                        })   
 
                     if new_host_user_id != old_host_user_id:
                         # Adjust points

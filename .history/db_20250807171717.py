@@ -22,7 +22,11 @@ user_organization = db.Table(
     db.Column("organization_id", db.Integer, db.ForeignKey("organization.id"), primary_key=True)
 )
 
-
+organization_opportunity = db.Table(
+    "organization_opportunity",
+    db.Column("organization_id", db.Integer, db.ForeignKey("organization.id"), primary_key=True),
+    db.Column("opportunity_id", db.Integer, db.ForeignKey("opportunity.id"), primary_key=True)
+)
 
 # Friends association table (self-referential many-to-many)
 user_friends = db.Table(
@@ -174,7 +178,11 @@ class Opportunity(db.Model):
 
     user_opportunities = db.relationship('UserOpportunity', back_populates='opportunity', cascade="all", passive_deletes=True)
     
-
+    participating_organizations = db.relationship(
+        "Organization",
+        secondary=organization_opportunity,
+        back_populates="opportunities_attended"
+    )
 
     def __init__(self, **kwargs):
         self.name = kwargs.get("name")
@@ -207,5 +215,5 @@ class Opportunity(db.Model):
                 }
                 for uo in self.user_opportunities
             ],
-
+            "participating_organizations": [org.name for org in self.participating_organizations]
         }

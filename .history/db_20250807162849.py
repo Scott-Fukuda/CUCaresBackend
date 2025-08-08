@@ -22,7 +22,11 @@ user_organization = db.Table(
     db.Column("organization_id", db.Integer, db.ForeignKey("organization.id"), primary_key=True)
 )
 
-
+organization_opportunity = db.Table(
+    "organization_opportunity",
+    db.Column("organization_id", db.Integer, db.ForeignKey("organization.id"), primary_key=True),
+    db.Column("opportunity_id", db.Integer, db.ForeignKey("opportunity.id"), primary_key=True)
+)
 
 # Friends association table (self-referential many-to-many)
 user_friends = db.Table(
@@ -114,12 +118,15 @@ class Organization(db.Model):
     users = db.relationship(
         "User", 
         secondary=user_organization, 
-        back_populates="organizations"
+        back_populates="organizations",
+        cascade="all, delete-orphan"
     )
 
-    opportunities_hosted = db.relationship(
+    opportunities_attended = db.relationship(
         "Opportunity",
-        back_populates="host_org"
+        secondary=organization_opportunity,
+        back_populates="participating_organizations",
+        cascade="all, delete-orphan"
     )
 
     host_user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
@@ -148,11 +155,11 @@ class Organization(db.Model):
                     "id": user.id,
                     "phone": user.phone,
                 } for user in self.users],
-            "opportunities_hosted": [ 
+            "opportunities_attended": [ 
                 {
                     "name": opp.name,
                     "id": opp.id
-                } for opp in self.opportunities_hosted]
+                } for opp in self.opportunities_attended]
         }
 
 class Opportunity(db.Model):
@@ -167,14 +174,19 @@ class Opportunity(db.Model):
     completed = db.Column(db.Boolean, default=False, nullable=False)
 
     host_org_id = db.Column(db.Integer, db.ForeignKey("organization.id"))
-    host_org = db.relationship("Organization", back_populates="opportunities_hosted")
+    host_org = db.relationship("Organization", backref=db.backref("hosted_opportunities", lazy="dynamic"))
 
     host_user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     host_user = db.relationship("User", back_populates="opportunities_hosted")
 
     user_opportunities = db.relationship('UserOpportunity', back_populates='opportunity', cascade="all", passive_deletes=True)
     
-
+    participating_organizations = db.relationship(
+        "Organization",
+        secondary=organization_opportunity,
+        back_populates="opportunities_attended",
+        cascade="all, delete-orphan"
+    )
 
     def __init__(self, **kwargs):
         self.name = kwargs.get("name")
@@ -207,5 +219,5 @@ class Opportunity(db.Model):
                 }
                 for uo in self.user_opportunities
             ],
-
+            "participating_organizations": [org.name for org in self.participating_organizations]
         }

@@ -805,14 +805,10 @@ def update_opportunity(opp_id):
                 elif field == 'host_user_id':
                     new_host_user_id = data['host_user_id']
                     old_host_user_id = opp.host_user_id
-                    
-                    # Check if new user exists
-                    new_user = User.query.get(new_host_user_id)
-                    if not new_user:
+                    if not User.query.get(old_host_user_id):
                         return jsonify({
-                            'message': 'Host user does not exist',
-                            'error': f'User with ID {new_host_user_id} not found'
-                        }), 404   
+                            'message': 'Host user does not exist'
+                        })   
 
                     if new_host_user_id != old_host_user_id:
                         # Adjust points

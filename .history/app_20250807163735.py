@@ -67,10 +67,10 @@ with app.app_context():
     db.create_all()
 
     # # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
-    # User.__table__.drop(db.engine)
-    # Opportunity.__table__.drop(db.engine)
-    # Organization.__table__.drop(db.engine)
-    # UserOpportunity.__table__.drop(db.engine)
+    User.__table__.drop(db.engine)
+    Opportunity.__table__.drop(db.engine)
+    Organization.__table__.drop(db.engine)
+    UserOpportunity.__table__.drop(db.engine)
 
 
 # Helper function to handle pagination
@@ -147,49 +147,6 @@ def register_user_for_opportunity():
         db.session.add(user_opportunity)
         db.session.commit()
         return jsonify({"message": "Registration successful"}), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/unregister-opp', methods=['POST'])
-def unregister_user_from_opportunity():
-    """Unregister a user from an opportunity"""
-    data = request.get_json()
-    user_id = data.get('user_id')
-    opportunity_id = data.get('opportunity_id')
-
-    if not user_id or not opportunity_id:
-        return jsonify({"error": "user_id and opportunity_id are required"}), 400
-
-    # Check if user exists
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({
-            "message": "User does not exist",
-            "error": f"User with ID {user_id} not found"
-        }), 404
-
-    # Check if opportunity exists
-    opportunity = Opportunity.query.get(opportunity_id)
-    if not opportunity:
-        return jsonify({
-            "message": "Opportunity does not exist",
-            "error": f"Opportunity with ID {opportunity_id} not found"
-        }), 404
-
-    # Check if user is registered with the opportunity
-    existing = UserOpportunity.query.filter_by(user_id=user_id, opportunity_id=opportunity_id).first()
-    if not existing:
-        return jsonify({
-            "message": "User not registered with this opportunity",
-            "error": f"User {user_id} is not registered for opportunity {opportunity_id}"
-        }), 404
-
-    try:
-        # Remove the association
-        db.session.delete(existing)
-        db.session.commit()
-        return jsonify({"message": "Unregistration successful"}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -789,30 +746,28 @@ def update_opportunity(opp_id):
                     setattr(opp, field, new_date)
                 elif(field == 'host_org_id'): # if host org changes, update this in other models
                     new_host_org_id = data['host_org_id']
-                    old_host_org_id = opp.host_org_id
-                    
-                    # Check if new organization exists
-                    new_org = Organization.query.get(new_host_org_id)
-                    if not new_org:
+                    old_host_org_id = opp.host_user_id
+                    if not Organization.query.get(old_host_org_id):
                         return jsonify({
-                            'message': 'Host organization does not exist',
-                            'error': f'Organization with ID {new_host_org_id} not found'
-                        }), 404
+                            'message': 'Host org does not exist'
+                        })  
                     
-                    # Simply update the host_org_id field
-                    setattr(opp, field, new_host_org_id)
+                    if new_host_org_id != old_host_org_id:
+                        old_org = Organization.query.get(old_host_user_id)
+                        new_org = Organization.query.get(new_host_user_id)
+
+                        opp.participating_organizations.append(new_org)
+                        opp.participating_organizations.remove(old_org)
+                        db.session.commit()
+                        setattr(opp, field, new_host_org_id)
                     
                 elif field == 'host_user_id':
                     new_host_user_id = data['host_user_id']
                     old_host_user_id = opp.host_user_id
-                    
-                    # Check if new user exists
-                    new_user = User.query.get(new_host_user_id)
-                    if not new_user:
+                    if not User.query.get(old_host_user_id):
                         return jsonify({
-                            'message': 'Host user does not exist',
-                            'error': f'User with ID {new_host_user_id} not found'
-                        }), 404   
+                            'message': 'Host user does not exist'
+                        })   
 
                     if new_host_user_id != old_host_user_id:
                         # Adjust points

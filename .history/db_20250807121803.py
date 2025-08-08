@@ -22,7 +22,11 @@ user_organization = db.Table(
     db.Column("organization_id", db.Integer, db.ForeignKey("organization.id"), primary_key=True)
 )
 
-
+organization_opportunity = db.Table(
+    "organization_opportunity",
+    db.Column("organization_id", db.Integer, db.ForeignKey("organization.id"), primary_key=True),
+    db.Column("opportunity_id", db.Integer, db.ForeignKey("opportunity.id"), primary_key=True)
+)
 
 # Friends association table (self-referential many-to-many)
 user_friends = db.Table(
@@ -37,9 +41,9 @@ class User(db.Model):
     profile_image = db.Column(db.String, nullable=True)  # string must be a url
     name = db.Column(db.String, nullable=False)
     email = db.Column(db.String, nullable=False)
-    phone = db.Column(db.String, nullable=False)
-    points = db.Column(db.Integer, nullable=False)
-    interests = db.Column(db.JSON, nullable=True, default=list) 
+    password = db.Column(db.String, nullable=False)
+    phone = db.Column(db.String, nullable=True)
+    points = db.Column(db.Integer, nullable=False) 
 
     organizations = db.relationship(
         "Organization", 
@@ -48,7 +52,7 @@ class User(db.Model):
         cascade="all"
     )  
 
-    user_opportunities = db.relationship('UserOpportunity', back_populates='user', cascade="all", passive_deletes=True)
+    user_opportunities = db.relationship('UserOpportunity', back_populates='user')
 
     opportunities_hosted = db.relationship(
         "Opportunity", 
@@ -69,9 +73,9 @@ class User(db.Model):
         self.profile_image = kwargs.get("profile_image")
         self.name = kwargs.get("name")
         self.email = kwargs.get("email")
+        self.password = kwargs.get("password")
         self.phone = kwargs.get("phone")
         self.points = kwargs.get("points", 0)
-        self.interests = kwargs.get("interests", [])
 
     def serialize(self):
         return {
@@ -81,7 +85,6 @@ class User(db.Model):
             "email": self.email,
             "phone": self.phone,
             "points": self.points,
-            "interests": self.interests or [],
             "organizations": [l.serialize() for l in self.organizations],
             "opportunities_hosted": [{"name": l.name} for l in self.opportunities_hosted], 
             "opportunities_involved": [
@@ -117,9 +120,10 @@ class Organization(db.Model):
         back_populates="organizations"
     )
 
-    opportunities_hosted = db.relationship(
+    opportunities_attended = db.relationship(
         "Opportunity",
-        back_populates="host_org"
+        secondary=organization_opportunity,
+        back_populates="participating_organizations"
     )
 
     host_user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
@@ -148,11 +152,11 @@ class Organization(db.Model):
                     "id": user.id,
                     "phone": user.phone,
                 } for user in self.users],
-            "opportunities_hosted": [ 
+            "opportunities_attended": [ 
                 {
                     "name": opp.name,
                     "id": opp.id
-                } for opp in self.opportunities_hosted]
+                } for opp in self.opportunities_attended]
         }
 
 class Opportunity(db.Model):
@@ -167,14 +171,18 @@ class Opportunity(db.Model):
     completed = db.Column(db.Boolean, default=False, nullable=False)
 
     host_org_id = db.Column(db.Integer, db.ForeignKey("organization.id"))
-    host_org = db.relationship("Organization", back_populates="opportunities_hosted")
+    host_org = db.relationship("Organization", backref=db.backref("hosted_opportunities", lazy="dynamic"))
 
     host_user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     host_user = db.relationship("User", back_populates="opportunities_hosted")
 
-    user_opportunities = db.relationship('UserOpportunity', back_populates='opportunity', cascade="all", passive_deletes=True)
+    user_opportunities = db.relationship('UserOpportunity', back_populates='opportunity')
     
-
+    participating_organizations = db.relationship(
+        "Organization",
+        secondary=organization_opportunity,
+        back_populates="opportunities_attended"
+    )
 
     def __init__(self, **kwargs):
         self.name = kwargs.get("name")
@@ -207,5 +215,5 @@ class Opportunity(db.Model):
                 }
                 for uo in self.user_opportunities
             ],
-
+            "participating_organizations": [org.name for org in self.participating_organizations]
         }
