@@ -1,17 +1,59 @@
 import json
-from flask import Flask, request, jsonify
+import os
+import uuid
+from flask import Flask, request, jsonify, send_from_directory
 from db import db, User, Organization, Opportunity, UserOpportunity
-from werkzeug.security import generate_password_hash
+
 from datetime import datetime
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
+import firebase_admin
+from firebase_admin import auth, credentials, initialize_app
+from dotenv import load_dotenv
 
 # define db filename
 db_filename = "cucares.db"
 app = Flask(__name__)
 
+# File upload configuration
+UPLOAD_FOLDER = 'static/uploads'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
 # restrict API access to requests from secure origin
 CORS(app, origins=["http://localhost:5173", "http://127.0.0.1:5173"])
 
+# Load environment variables from .env file
+load_dotenv()
+
+# Initialize Firebase Admin SDK
+try:
+    # Check if environment variable is set
+    if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
+        # Get the path to the service account file
+        service_account_path = os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+        
+        # If it's a relative path, make it absolute
+        if not os.path.isabs(service_account_path):
+            service_account_path = os.path.join(os.getcwd(), service_account_path)
+        
+        # Check if the file exists
+        if os.path.exists(service_account_path):
+            cred = credentials.Certificate(service_account_path)
+            firebase_admin.initialize_app(cred)
+            print(f"Firebase Admin SDK initialized successfully with: {service_account_path}")
+        else:
+            print(f"Warning: Service account file not found at: {service_account_path}")
+            firebase_admin.initialize_app()
+    else:
+        print("Warning: GOOGLE_APPLICATION_CREDENTIALS environment variable not set")
+        print("Firebase authentication will not work without proper credentials")
+        # Initialize with default app (for development/testing)
+        firebase_admin.initialize_app()
+except Exception as e:
+    print(f"Warning: Firebase Admin SDK initialization failed: {e}")
+    print("Firebase authentication endpoints will not work")
 
 # setup config
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_filename}"
@@ -35,18 +77,50 @@ with app.app_context():
 def paginate(query, page=1, per_page=20):
     return query.paginate(page=page, per_page=per_page, error_out=False)
 
-@app.route('/api/user-pass/<int:user_id>', methods=['GET'])
-def get_user_pass(user_id):
-    """Get user pass"""
-    try:
-        user = User.query.get_or_404(user_id)
-        return jsonify(user.password)
+# Helper functions for file uploads
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def save_profile_image(file, email):
+    """Save profile image with email-based filename"""
+    if file and allowed_file(file.filename):
+        # Get file extension
+        file_extension = file.filename.rsplit('.', 1)[1].lower()
+        
+        # Create filename: original_filename_email.extension
+        original_filename = secure_filename(file.filename.rsplit('.', 1)[0])
+        filename = f"{original_filename}_{email}.{file_extension}"
+        
+        # Ensure upload directory exists
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        
+        # Save file
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(file_path)
+        
+        # Return the relative path for database storage
+        return f"/static/uploads/{filename}"
     
+    return None
+
+def verify_firebase_token(token):
+    """Verify Firebase ID token and return user info"""
+    try:
+        # Verify the token
+        decoded_token = auth.verify_id_token(token)
+        return {
+            'success': True,
+            'user_id': decoded_token['uid'],
+            'email': decoded_token.get('email'),
+            'name': decoded_token.get('name'),
+            'picture': decoded_token.get('picture')
+        }
     except Exception as e:
-        return jsonify({
-            'message': 'Failed to fetch user password',
+        return {
+            'success': False,
             'error': str(e)
-        }), 500
+        }
 
 # Special Endpoints
 @app.route('/api/register-opp', methods=['POST'])
@@ -73,6 +147,49 @@ def register_user_for_opportunity():
         db.session.add(user_opportunity)
         db.session.commit()
         return jsonify({"message": "Registration successful"}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/unregister-opp', methods=['POST'])
+def unregister_user_from_opportunity():
+    """Unregister a user from an opportunity"""
+    data = request.get_json()
+    user_id = data.get('user_id')
+    opportunity_id = data.get('opportunity_id')
+
+    if not user_id or not opportunity_id:
+        return jsonify({"error": "user_id and opportunity_id are required"}), 400
+
+    # Check if user exists
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({
+            "message": "User does not exist",
+            "error": f"User with ID {user_id} not found"
+        }), 404
+
+    # Check if opportunity exists
+    opportunity = Opportunity.query.get(opportunity_id)
+    if not opportunity:
+        return jsonify({
+            "message": "Opportunity does not exist",
+            "error": f"Opportunity with ID {opportunity_id} not found"
+        }), 404
+
+    # Check if user is registered with the opportunity
+    existing = UserOpportunity.query.filter_by(user_id=user_id, opportunity_id=opportunity_id).first()
+    if not existing:
+        return jsonify({
+            "message": "User not registered with this opportunity",
+            "error": f"User {user_id} is not registered for opportunity {opportunity_id}"
+        }), 404
+
+    try:
+        # Remove the association
+        db.session.delete(existing)
+        db.session.commit()
+        return jsonify({"message": "Unregistration successful"}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
@@ -184,17 +301,57 @@ def marked_as_attended():
 # User Endpoints
 @app.route('/api/users', methods=['POST'])
 def create_user():
-    """Create a new user"""
+    """Create a new user with optional file upload"""
     try:
-        data = request.get_json()
-        
-        # Validate required fields
-        required_fields = ['name', 'email', 'password']
-        if not all(field in data for field in required_fields):
-            return jsonify({
-                'message': 'Missing required fields',
-                'required': required_fields
-            }), 400
+        # Check if this is a multipart form (file upload) or JSON
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            # Handle file upload
+            name = request.form.get('name')
+            email = request.form.get('email')
+            phone = request.form.get('phone')
+            points = request.form.get('points', 0)
+            interests = request.form.get('interests', '[]')  # Default to empty JSON array string
+            
+            # Validate required fields
+            required_fields = ['name', 'email', 'phone']
+            if not all(field in [name, email, phone]):
+                return jsonify({
+                    'message': 'Missing required fields',
+                    'required': required_fields
+                }), 400
+            
+            # Handle profile image upload
+            profile_image_path = None
+            if 'profile_image' in request.files:
+                file = request.files['profile_image']
+                profile_image_path = save_profile_image(file, email)
+            
+            # Parse interests from JSON string to list
+            try:
+                import json
+                interests_list = json.loads(interests) if interests else []
+            except (json.JSONDecodeError, TypeError):
+                interests_list = []
+            
+            data = {
+                'name': name,
+                'email': email,
+                'phone': phone,
+                'points': points,
+                'interests': interests_list,
+                'profile_image': profile_image_path
+            }
+        else:
+            # Handle JSON data
+            data = request.get_json()
+            
+            # Validate required fields
+            required_fields = ['name', 'email']
+            if not all(field in data for field in required_fields):
+                return jsonify({
+                    'message': 'Missing required fields',
+                    'required': required_fields
+                }), 400
         
         # Check if user already exists
         existing_user = User.query.filter_by(email=data['email']).first()
@@ -208,8 +365,9 @@ def create_user():
             profile_image=data.get('profile_image'),
             name=data['name'],
             email=data['email'],
-            password=data['password'],
-            points=data.get('points', 0)
+            phone=data.get('phone'),
+            points=data.get('points', 0),
+            interests=data.get('interests', [])
         )
         
         db.session.add(new_user)
@@ -264,20 +422,42 @@ def get_user(user_id):
 
 @app.route('/api/users/<int:user_id>', methods=['PUT'])
 def update_user(user_id):
-    """Update a user"""
+    """Update a user with optional file upload"""
     try:
         user = User.query.get_or_404(user_id)
-        data = request.get_json()
+        
+        # Check if this is a multipart form (file upload) or JSON
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            # Handle file upload
+            data = {}
+            for field in ['name', 'email', 'phone', 'points']:
+                if field in request.form:
+                    data[field] = request.form[field]
+            
+            # Handle interests field from form
+            if 'interests' in request.form:
+                try:
+                    import json
+                    interests_list = json.loads(request.form['interests']) if request.form['interests'] else []
+                    data['interests'] = interests_list
+                except (json.JSONDecodeError, TypeError):
+                    data['interests'] = []
+            
+            # Handle profile image upload
+            if 'profile_image' in request.files:
+                file = request.files['profile_image']
+                profile_image_path = save_profile_image(file, user.email)
+                if profile_image_path:
+                    data['profile_image'] = profile_image_path
+        else:
+            # Handle JSON data
+            data = request.get_json()
         
         # Only update fields that exist in the model
-        valid_fields = ['profile_image', 'name', 'email', 'password', 'points']
+        valid_fields = ['profile_image', 'name', 'email', 'phone', 'points', 'interests']
         for field in valid_fields:
             if field in data:
                 setattr(user, field, data[field])
-        
-        # Special handling for password
-        if 'password' in data:
-            user.password = generate_password_hash(data['password'])
         
         db.session.commit()
         return jsonify(user.serialize())
@@ -501,10 +681,21 @@ def create_opportunity():
                 'required': required_fields
             }), 400
         
-        if not User.query.get(data['host_user_id']):
+        # Check if host user exists
+        host_user = User.query.get(data['host_user_id'])
+        if not host_user:
             return jsonify({
-                'message': 'Host user does not exist'
-            })        
+                'message': 'Host user does not exist',
+                'error': f'User with ID {data["host_user_id"]} not found'
+            }), 404
+        
+        # Check if host organization exists
+        host_org = Organization.query.get(data['host_org_id'])
+        if not host_org:
+            return jsonify({
+                'message': 'Host organization does not exist',
+                'error': f'Organization with ID {data["host_org_id"]} not found'
+            }), 404
         
         # Create new opportunity
         new_opportunity = Opportunity(
@@ -598,28 +789,30 @@ def update_opportunity(opp_id):
                     setattr(opp, field, new_date)
                 elif(field == 'host_org_id'): # if host org changes, update this in other models
                     new_host_org_id = data['host_org_id']
-                    old_host_org_id = opp.host_user_id
-                    if not Organization.query.get(old_host_org_id):
-                        return jsonify({
-                            'message': 'Host org does not exist'
-                        })  
+                    old_host_org_id = opp.host_org_id
                     
-                    if new_host_org_id != old_host_org_id:
-                        old_org = Organization.query.get(old_host_user_id)
-                        new_org = Organization.query.get(new_host_user_id)
-
-                        opp.participating_organizations.append(new_org)
-                        opp.participating_organizations.remove(old_org)
-                        db.session.commit()
-                        setattr(opp, field, new_host_org_id)
+                    # Check if new organization exists
+                    new_org = Organization.query.get(new_host_org_id)
+                    if not new_org:
+                        return jsonify({
+                            'message': 'Host organization does not exist',
+                            'error': f'Organization with ID {new_host_org_id} not found'
+                        }), 404
+                    
+                    # Simply update the host_org_id field
+                    setattr(opp, field, new_host_org_id)
                     
                 elif field == 'host_user_id':
                     new_host_user_id = data['host_user_id']
                     old_host_user_id = opp.host_user_id
-                    if not User.query.get(old_host_user_id):
+                    
+                    # Check if new user exists
+                    new_user = User.query.get(new_host_user_id)
+                    if not new_user:
                         return jsonify({
-                            'message': 'Host user does not exist'
-                        })   
+                            'message': 'Host user does not exist',
+                            'error': f'User with ID {new_host_user_id} not found'
+                        }), 404   
 
                     if new_host_user_id != old_host_user_id:
                         # Adjust points
@@ -701,6 +894,7 @@ def get_user_friends(user_id):
                     'id': friend.id,
                     'name': friend.name,
                     'profile_image': friend.profile_image,
+                    'phone': friend.phone,
                     'points': friend.points
                 } for friend in friends
             ]
@@ -793,6 +987,96 @@ def check_friendship(user_id, friend_id):
             'message': 'Failed to check friendship',
             'error': str(e)
         }), 500
+
+
+@app.route('/api/protected', methods=['POST'])
+def protected_endpoint():
+    """Protected endpoint that requires Firebase token verification"""
+    try:
+        # Get the Authorization header
+        auth_header = request.headers.get('Authorization')
+        
+        if not auth_header:
+            return jsonify({
+                'error': 'Authorization header is required',
+                'message': 'Please provide a valid Firebase ID token'
+            }), 401
+        
+        # Check if it's a Bearer token
+        if not auth_header.startswith('Bearer '):
+            return jsonify({
+                'error': 'Invalid authorization format',
+                'message': 'Authorization header must be in format: Bearer <token>'
+            }), 401
+        
+        # Extract the token
+        token = auth_header.split('Bearer ')[1]
+        
+        if not token:
+            return jsonify({
+                'error': 'Token is required',
+                'message': 'Please provide a valid Firebase ID token'
+            }), 401
+        
+        # Verify the token
+        verification_result = verify_firebase_token(token)
+        
+        if not verification_result['success']:
+            return jsonify({
+                'error': 'Invalid token',
+                'message': 'The provided token is invalid or expired',
+                'details': verification_result.get('error', 'Unknown error')
+            }), 401
+        
+        # Token is valid, return user information
+        return jsonify({
+            'message': 'Token verified successfully',
+            'user': {
+                'uid': verification_result['user_id'],
+                'email': verification_result['email'],
+                'name': verification_result['name'],
+                'picture': verification_result['picture']
+            },
+            'status': 'authenticated'
+        }), 200
+    
+    except Exception as e:
+        return jsonify({
+            'error': 'Internal server error',
+            'message': 'An error occurred while verifying the token',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/firebase-status', methods=['GET'])
+def firebase_status():
+    """Check Firebase configuration status"""
+    try:
+        # Check if Firebase is properly initialized
+        if firebase_admin._apps:
+            return jsonify({
+                'status': 'Firebase Admin SDK is initialized',
+                'message': 'Firebase authentication is available',
+                'apps_count': len(firebase_admin._apps)
+            }), 200
+        else:
+            return jsonify({
+                'status': 'Firebase Admin SDK is not initialized',
+                'message': 'Firebase authentication is not available',
+                'error': 'No Firebase apps found'
+            }), 500
+    except Exception as e:
+        return jsonify({
+            'status': 'Firebase Admin SDK error',
+            'message': 'Firebase authentication is not available',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/static/uploads/<filename>')
+def uploaded_file(filename):
+    """Serve uploaded files"""
+    return send_from_directory(UPLOAD_FOLDER, filename)
 
 
 if __name__ == "__main__":
