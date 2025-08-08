@@ -201,9 +201,6 @@ class Opportunity(db.Model):
             "duration": self.duration,
             "cause": self.cause,
             "completed": self.completed,
-            "nonprofit": self.nonprofit,
-            "total_slots": self.total_slots,
-            "image_url": self.image_url,
             "host_org_id": self.host_org_id,
             "host_user_id": self.host_user_id,
             "involved_users": [

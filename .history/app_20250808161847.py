@@ -782,7 +782,7 @@ def update_opportunity(opp_id):
 
         
         # Only update fields that exist in the model
-        valid_fields = ['name', 'description', 'date', 'completed', 'nonprofit', 'total_slots', 'image_url',
+        valid_fields = ['name', 'description', 'date', 'completed', 
                        'host_org_id', 'host_user_id']       
         
         for field in valid_fields:

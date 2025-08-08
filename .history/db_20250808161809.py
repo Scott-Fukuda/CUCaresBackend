@@ -186,9 +186,6 @@ class Opportunity(db.Model):
         self.duration = kwargs.get("duration") # duration in mintues
         self.cause = kwargs.get("cause")
         self.completed = kwargs.get("completed", False)
-        self.nonprofit = kwargs.get("nonprofit")
-        self.total_slots = kwargs.get("total_slots")
-        self.image_url = kwargs.get("image_url")
         self.host_org_id = kwargs.get("host_org_id")
         self.host_user_id = kwargs.get("host_user_id")
 
@@ -201,9 +198,6 @@ class Opportunity(db.Model):
             "duration": self.duration,
             "cause": self.cause,
             "completed": self.completed,
-            "nonprofit": self.nonprofit,
-            "total_slots": self.total_slots,
-            "image_url": self.image_url,
             "host_org_id": self.host_org_id,
             "host_user_id": self.host_user_id,
             "involved_users": [
