@@ -4,7 +4,7 @@ import uuid
 from flask import Flask, request, jsonify, send_from_directory
 from db import db, User, Organization, Opportunity, UserOpportunity
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import firebase_admin
@@ -67,10 +67,10 @@ with app.app_context():
     db.create_all()
 
     # # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
-    User.__table__.drop(db.engine)
-    Opportunity.__table__.drop(db.engine)
-    Organization.__table__.drop(db.engine)
-    UserOpportunity.__table__.drop(db.engine)
+    # User.__table__.drop(db.engine)
+    # Opportunity.__table__.drop(db.engine)
+    # Organization.__table__.drop(db.engine)
+    # UserOpportunity.__table__.drop(db.engine)
 
 
 # Helper function to handle pagination
@@ -121,6 +121,25 @@ def verify_firebase_token(token):
             'success': False,
             'error': str(e)
         }
+
+def parse_eastern_time(date_string):
+    """Parse date string and convert to Eastern Time (UTC-4)"""
+    try:
+        # Parse the date string (assuming it's in Eastern Time)
+        dt = datetime.strptime(date_string, '%Y-%m-%dT%H:%M:%S')
+        
+        # Create Eastern Time timezone (UTC-4)
+        eastern_tz = timezone(timedelta(hours=-4))
+        
+        # Make the datetime timezone-aware by assuming it's in Eastern Time
+        dt_eastern = dt.replace(tzinfo=eastern_tz)
+        
+        # Convert to UTC for storage
+        dt_utc = dt_eastern.astimezone(timezone.utc)
+        
+        return dt_utc
+    except ValueError as e:
+        raise ValueError(f"Invalid date format. Expected 'YYYY-MM-DDTHH:MM:SS' in Eastern Time. Error: {e}")
 
 # Special Endpoints
 @app.route('/api/register-opp', methods=['POST'])
@@ -255,43 +274,84 @@ def unregister_user_from_organization():
 @app.route('/api/attendance', methods=['PUT'])
 def marked_as_attended():
     data = request.get_json()
-    user_id = data.get('user_id')
+    user_ids = data.get('user_ids')
     opportunity_id = data.get('opportunity_id')
 
-    if not user_id or not opportunity_id:
-        return jsonify({"error": "user_id and opportunity_id are required"}), 400
+    if not user_ids or not opportunity_id:
+        return jsonify({"error": "user_ids and opportunity_id are required"}), 400
+
+    if not isinstance(user_ids, list):
+        return jsonify({"error": "user_ids must be a list"}), 400
 
     try:
-        user = User.query.get(user_id)
         opp = Opportunity.query.get(opportunity_id)
-
-        if not user or not opp:
-            return jsonify({"error": "Invalid user_id or opportunity_id"}), 404
+        if not opp:
+            return jsonify({"error": "Invalid opportunity_id"}), 404
 
         opp_dur = getattr(opp, 'duration', 0) or 0  # fallback if duration is None
+        results = []
+        updated_count = 0
+        already_attended_count = 0
+        new_registrations = 0
 
-        existing = UserOpportunity.query.filter_by(user_id=user_id, opportunity_id=opportunity_id).first()
-        
-        if existing:
-            if not existing.attended:
-                existing.attended = True
-                user.points += opp_dur
-                db.session.commit()
-                return jsonify({"message": "Attendance updated & points awarded"}), 200
+        for user_id in user_ids:
+            user = User.query.get(user_id)
+            if not user:
+                results.append({
+                    "user_id": user_id,
+                    "status": "error",
+                    "message": "User not found"
+                })
+                continue
+
+            existing = UserOpportunity.query.filter_by(user_id=user_id, opportunity_id=opportunity_id).first()
+            
+            if existing:
+                if not existing.attended:
+                    existing.attended = True
+                    user.points += opp_dur
+                    updated_count += 1
+                    results.append({
+                        "user_id": user_id,
+                        "status": "success",
+                        "message": "Attendance updated & points awarded"
+                    })
+                else:
+                    already_attended_count += 1
+                    results.append({
+                        "user_id": user_id,
+                        "status": "info",
+                        "message": "User already marked as attended"
+                    })
             else:
-                return jsonify({"message": "User already marked as attended"}), 200
+                # If not already registered, create new entry and mark as attended
+                user_opportunity = UserOpportunity(
+                    user_id=user_id,
+                    opportunity_id=opportunity_id,
+                    registered=False,
+                    attended=True
+                )
+                db.session.add(user_opportunity)
+                user.points += opp_dur
+                new_registrations += 1
+                results.append({
+                    "user_id": user_id,
+                    "status": "success",
+                    "message": "Marked as attended and registered, points awarded"
+                })
 
-        # If not already registered, create new entry and mark as attended
-        user_opportunity = UserOpportunity(
-            user_id=user_id,
-            opportunity_id=opportunity_id,
-            registered=False,
-            attended=True
-        )
-        db.session.add(user_opportunity)
-        user.points += opp_dur
         db.session.commit()
-        return jsonify({"message": "Marked as attended and registered, points awarded"}), 201
+        
+        return jsonify({
+            "message": f"Processed {len(user_ids)} users",
+            "summary": {
+                "total_processed": len(user_ids),
+                "updated": updated_count,
+                "already_attended": already_attended_count,
+                "new_registrations": new_registrations
+            },
+            "results": results
+        }), 200
 
     except Exception as e:
         db.session.rollback()

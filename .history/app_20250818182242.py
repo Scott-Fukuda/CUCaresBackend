@@ -67,10 +67,10 @@ with app.app_context():
     db.create_all()
 
     # # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
-    User.__table__.drop(db.engine)
-    Opportunity.__table__.drop(db.engine)
-    Organization.__table__.drop(db.engine)
-    UserOpportunity.__table__.drop(db.engine)
+    # User.__table__.drop(db.engine)
+    # Opportunity.__table__.drop(db.engine)
+    # Organization.__table__.drop(db.engine)
+    # UserOpportunity.__table__.drop(db.engine)
 
 
 # Helper function to handle pagination
@@ -788,7 +788,7 @@ def update_opportunity(opp_id):
         for field in valid_fields:
             if field in data:
                 if(field == 'date'):
-                    new_date = datetime.strptime(data['date'], '%Y-%m-%dT%H:%M:%S') # converts to datetime object
+                    new_date = parse_eastern_time(data['date']) # converts to datetime object in Eastern Time
                     setattr(opp, field, new_date)
                 elif(field == 'host_org_id'): # if host org changes, update this in other models
                     new_host_org_id = data['host_org_id']
