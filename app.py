@@ -67,10 +67,10 @@ with app.app_context():
     db.create_all()
 
     # # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
-    User.__table__.drop(db.engine)
-    Opportunity.__table__.drop(db.engine)
-    Organization.__table__.drop(db.engine)
-    UserOpportunity.__table__.drop(db.engine)
+    # User.__table__.drop(db.engine)
+    # Opportunity.__table__.drop(db.engine)
+    # Organization.__table__.drop(db.engine)
+    # UserOpportunity.__table__.drop(db.engine)
 
 
 # Helper function to handle pagination
@@ -82,8 +82,8 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def save_profile_image(file, email):
-    """Save profile image with email-based filename"""
+def save_user_image(file, email):
+    """Save user image with email-based filename"""
     if file and allowed_file(file.filename):
         # Get file extension
         file_extension = file.filename.rsplit('.', 1)[1].lower()
@@ -91,6 +91,27 @@ def save_profile_image(file, email):
         # Create filename: original_filename_email.extension
         original_filename = secure_filename(file.filename.rsplit('.', 1)[0])
         filename = f"{original_filename}_{email}.{file_extension}"
+        
+        # Ensure upload directory exists
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        
+        # Save file
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(file_path)
+        
+        # Return the relative path for database storage
+        return f"/static/uploads/{filename}"
+    
+    return None
+
+def save_opportunity_image(file, opportunity_id):
+    """Save opportunity image with opportunity_id-based filename"""
+    if file and allowed_file(file.filename):
+        # Get file extension
+        file_extension = file.filename.rsplit('.', 1)[1].lower()
+        
+        # Create filename: image_{opportunity_id}.extension
+        filename = f"image_{opportunity_id}.{file_extension}"
         
         # Ensure upload directory exists
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -320,11 +341,11 @@ def create_user():
                     'required': required_fields
                 }), 400
             
-            # Handle profile image upload
-            profile_image_path = None
-            if 'profile_image' in request.files:
-                file = request.files['profile_image']
-                profile_image_path = save_profile_image(file, email)
+            # Handle image upload
+            image_path = None
+            if 'image' in request.files:
+                file = request.files['image']
+                image_path = save_user_image(file, email)
             
             # Parse interests from JSON string to list
             try:
@@ -339,7 +360,13 @@ def create_user():
                 'phone': phone,
                 'points': points,
                 'interests': interests_list,
-                'profile_image': profile_image_path
+                'profile_image': image_path,
+                'admin': request.form.get('admin', False),
+                'gender': request.form.get('gender'),
+                'graduation_year': request.form.get('graduation_year'),
+                'academic_level': request.form.get('academic_level'),
+                'major': request.form.get('major'),
+                'birthday': request.form.get('birthday')
             }
         else:
             # Handle JSON data
@@ -360,6 +387,19 @@ def create_user():
                 'message': 'Email already registered'
             }), 400
         
+        # Parse birthday if provided
+        birthday = None
+        if data.get('birthday'):
+            try:
+                birthday = datetime.strptime(data['birthday'], '%Y-%m-%dT%H:%M:%S')
+            except ValueError:
+                try:
+                    birthday = datetime.strptime(data['birthday'], '%Y-%m-%d')
+                except ValueError:
+                    return jsonify({
+                        'message': 'Invalid birthday format. Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS'
+                    }), 400
+        
         # Create new user
         new_user = User(
             profile_image=data.get('profile_image'),
@@ -367,7 +407,13 @@ def create_user():
             email=data['email'],
             phone=data.get('phone'),
             points=data.get('points', 0),
-            interests=data.get('interests', [])
+            interests=data.get('interests', []),
+            admin=data.get('admin', False),
+            gender=data.get('gender'),
+            graduation_year=data.get('graduation_year'),
+            academic_level=data.get('academic_level'),
+            major=data.get('major'),
+            birthday=birthday
         )
         
         db.session.add(new_user)
@@ -430,7 +476,7 @@ def update_user(user_id):
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'email', 'phone', 'points']:
+            for field in ['name', 'email', 'phone', 'points', 'admin', 'gender', 'graduation_year', 'academic_level', 'major', 'birthday']:
                 if field in request.form:
                     data[field] = request.form[field]
             
@@ -446,18 +492,33 @@ def update_user(user_id):
             # Handle profile image upload
             if 'profile_image' in request.files:
                 file = request.files['profile_image']
-                profile_image_path = save_profile_image(file, user.email)
-                if profile_image_path:
-                    data['profile_image'] = profile_image_path
+                image_path = save_user_image(file, user.email)
+                if image_path:
+                    data['profile_image'] = image_path
         else:
             # Handle JSON data
             data = request.get_json()
         
         # Only update fields that exist in the model
-        valid_fields = ['profile_image', 'name', 'email', 'phone', 'points', 'interests']
+        valid_fields = ['profile_image', 'name', 'email', 'phone', 'points', 'interests', 'admin', 'gender', 'graduation_year', 'academic_level', 'major', 'birthday']
         for field in valid_fields:
             if field in data:
-                setattr(user, field, data[field])
+                if field == 'birthday':
+                    # Parse birthday if provided
+                    birthday = None
+                    if data['birthday']:
+                        try:
+                            birthday = datetime.strptime(data['birthday'], '%Y-%m-%dT%H:%M:%S')
+                        except ValueError:
+                            try:
+                                birthday = datetime.strptime(data['birthday'], '%Y-%m-%d')
+                            except ValueError:
+                                return jsonify({
+                                    'message': 'Invalid birthday format. Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS'
+                                }), 400
+                    setattr(user, field, birthday)
+                else:
+                    setattr(user, field, data[field])
         
         db.session.commit()
         return jsonify(user.serialize())
@@ -670,9 +731,26 @@ def delete_organization(org_id):
 # Opportunity Endpoints
 @app.route('/api/opps', methods=['POST'])
 def create_opportunity():
-    """Create a new opportunity"""
+    """Create a new opportunity with optional file upload"""
     try:
-        data = request.get_json()
+        # Check if this is a multipart form (file upload) or JSON
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            # Handle file upload
+            data = {}
+            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'cause', 'duration', 'description', 'address', 'nonprofit', 'total_slots']:
+                if field in request.form:
+                    data[field] = request.form[field]
+            
+            # Handle image upload
+            if 'image' in request.files:
+                file = request.files['image']
+                image_path = save_opportunity_image(file, None)  # Will be updated after opportunity creation
+                if image_path:
+                    data['image'] = image_path
+        else:
+            # Handle JSON data
+            data = request.get_json()
+        
         # Validate required fields
         required_fields = ['name', 'host_org_id', 'host_user_id', 'date', 'cause', 'duration']
         if not all(field in data for field in required_fields):
@@ -704,10 +782,10 @@ def create_opportunity():
             date=datetime.strptime(data['date'], '%Y-%m-%dT%H:%M:%S'), # converts to datetime object
             duration=data['duration'],
             cause=data.get('cause'),
-            completed=data.get('completed', False),
+            address=data.get('address'),
             nonprofit=data.get('nonprofit'),
             total_slots=data.get('total_slots'),
-            image_url=data.get('image_url'),
+            image=data.get('image'),
             host_org_id=data['host_org_id'],
             host_user_id=data['host_user_id']
         )
@@ -715,11 +793,11 @@ def create_opportunity():
         db.session.add(new_opportunity)
         db.session.commit()
 
-        # mark host are registered
+        # mark host as registered with registered=False
         user_opportunity = UserOpportunity(
                         user_id=data['host_user_id'],
                         opportunity_id=new_opportunity.id,
-                        registered=True, # Keep marked as not registered
+                        registered=False, # Host is initially not registered
                         attended=False  # Match your model field spelling
                     )
         db.session.add(user_opportunity)
@@ -774,15 +852,31 @@ def get_opportunity(opp_id):
 
 @app.route('/api/opps/<int:opp_id>', methods=['PUT'])
 def update_opportunity(opp_id):
-    """Update an opportunity"""
+    """Update an opportunity with optional file upload"""
     try:
         opp = Opportunity.query.get_or_404(opp_id)
-        data = request.get_json()
         points = getattr(opp, "duration", 0) or 0
 
+        # Check if this is a multipart form (file upload) or JSON
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            # Handle file upload
+            data = {}
+            for field in ['name', 'description', 'date', 'address', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id']:
+                if field in request.form:
+                    data[field] = request.form[field]
+            
+            # Handle image upload
+            if 'image' in request.files:
+                file = request.files['image']
+                image_path = save_opportunity_image(file, opp_id)
+                if image_path:
+                    data['image'] = image_path
+        else:
+            # Handle JSON data
+            data = request.get_json()
         
         # Only update fields that exist in the model
-        valid_fields = ['name', 'description', 'date', 'completed', 'nonprofit', 'total_slots', 'image_url',
+        valid_fields = ['name', 'description', 'date', 'address', 'nonprofit', 'total_slots', 'image',
                        'host_org_id', 'host_user_id']       
         
         for field in valid_fields:
