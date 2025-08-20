@@ -43,9 +43,7 @@ class User(db.Model):
     admin = db.Column(db.Boolean, default=False, nullable=False)
     gender = db.Column(db.String, nullable=True)
     graduation_year = db.Column(db.String, nullable=True)
-    academic_level = db.Column(db.String, nullable=True)
-    major = db.Column(db.String, nullable=True)
-    birthday = db.Column(DateTime, nullable=True) 
+    academic_level = db.Column(db.String, nullable=True) 
 
     organizations = db.relationship(
         "Organization", 
@@ -82,8 +80,6 @@ class User(db.Model):
         self.gender = kwargs.get("gender")
         self.graduation_year = kwargs.get("graduation_year")
         self.academic_level = kwargs.get("academic_level")
-        self.major = kwargs.get("major")
-        self.birthday = kwargs.get("birthday")
 
     def serialize(self):
         return {
@@ -95,11 +91,6 @@ class User(db.Model):
             "points": self.points,
             "interests": self.interests or [],
             "admin": self.admin,
-            "gender": self.gender,
-            "graduation_year": self.graduation_year,
-            "academic_level": self.academic_level,
-            "major": self.major,
-            "birthday": self.birthday,
             "organizations": [l.serialize() for l in self.organizations],
             "opportunities_hosted": [{"name": l.name} for l in self.opportunities_hosted], 
             "opportunities_involved": [

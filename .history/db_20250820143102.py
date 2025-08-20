@@ -40,12 +40,7 @@ class User(db.Model):
     phone = db.Column(db.String, nullable=False)
     points = db.Column(db.Integer, nullable=False)
     interests = db.Column(db.JSON, nullable=True, default=list)
-    admin = db.Column(db.Boolean, default=False, nullable=False)
-    gender = db.Column(db.String, nullable=True)
-    graduation_year = db.Column(db.String, nullable=True)
-    academic_level = db.Column(db.String, nullable=True)
-    major = db.Column(db.String, nullable=True)
-    birthday = db.Column(DateTime, nullable=True) 
+    admin = db.Column(db.Boolean, default=False, nullable=False) 
 
     organizations = db.relationship(
         "Organization", 
@@ -78,12 +73,6 @@ class User(db.Model):
         self.phone = kwargs.get("phone")
         self.points = kwargs.get("points", 0)
         self.interests = kwargs.get("interests", [])
-        self.admin = kwargs.get("admin", False)
-        self.gender = kwargs.get("gender")
-        self.graduation_year = kwargs.get("graduation_year")
-        self.academic_level = kwargs.get("academic_level")
-        self.major = kwargs.get("major")
-        self.birthday = kwargs.get("birthday")
 
     def serialize(self):
         return {
@@ -94,12 +83,6 @@ class User(db.Model):
             "phone": self.phone,
             "points": self.points,
             "interests": self.interests or [],
-            "admin": self.admin,
-            "gender": self.gender,
-            "graduation_year": self.graduation_year,
-            "academic_level": self.academic_level,
-            "major": self.major,
-            "birthday": self.birthday,
             "organizations": [l.serialize() for l in self.organizations],
             "opportunities_hosted": [{"name": l.name} for l in self.opportunities_hosted], 
             "opportunities_involved": [
@@ -182,10 +165,10 @@ class Opportunity(db.Model):
     date = db.Column(DateTime, nullable=False)
     duration = db.Column(db.Integer, nullable=False)
     cause = db.Column(db.String, nullable=False)
-    address = db.Column(db.String, nullable=True)
+    completed = db.Column(db.Boolean, default=False, nullable=False)
     nonprofit = db.Column(db.String, nullable=True)
     total_slots = db.Column(db.Integer, nullable=True)
-    image = db.Column(db.String, nullable=True)
+    image_url = db.Column(db.String, nullable=True)
 
     host_org_id = db.Column(db.Integer, db.ForeignKey("organization.id"))
     host_org = db.relationship("Organization", back_populates="opportunities_hosted")
@@ -203,10 +186,10 @@ class Opportunity(db.Model):
         self.date = kwargs.get("date")
         self.duration = kwargs.get("duration") # duration in mintues
         self.cause = kwargs.get("cause")
-        self.address = kwargs.get("address")
+        self.completed = kwargs.get("completed", False)
         self.nonprofit = kwargs.get("nonprofit")
         self.total_slots = kwargs.get("total_slots")
-        self.image = kwargs.get("image")
+        self.image_url = kwargs.get("image_url")
         self.host_org_id = kwargs.get("host_org_id")
         self.host_user_id = kwargs.get("host_user_id")
 
@@ -218,10 +201,10 @@ class Opportunity(db.Model):
             "date": self.date,
             "duration": self.duration,
             "cause": self.cause,
-            "address": self.address,
+            "completed": self.completed,
             "nonprofit": self.nonprofit,
             "total_slots": self.total_slots,
-            "image": self.image,
+            "image_url": self.image_url,
             "host_org_id": self.host_org_id,
             "host_user_id": self.host_user_id,
             "involved_users": [

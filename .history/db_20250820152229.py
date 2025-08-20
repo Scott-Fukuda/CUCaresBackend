@@ -82,8 +82,6 @@ class User(db.Model):
         self.gender = kwargs.get("gender")
         self.graduation_year = kwargs.get("graduation_year")
         self.academic_level = kwargs.get("academic_level")
-        self.major = kwargs.get("major")
-        self.birthday = kwargs.get("birthday")
 
     def serialize(self):
         return {
@@ -98,8 +96,6 @@ class User(db.Model):
             "gender": self.gender,
             "graduation_year": self.graduation_year,
             "academic_level": self.academic_level,
-            "major": self.major,
-            "birthday": self.birthday,
             "organizations": [l.serialize() for l in self.organizations],
             "opportunities_hosted": [{"name": l.name} for l in self.opportunities_hosted], 
             "opportunities_involved": [

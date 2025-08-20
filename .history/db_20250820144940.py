@@ -34,18 +34,13 @@ user_friends = db.Table(
 class User(db.Model):
     __tablename__ = "user"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)    
-    profile_image = db.Column(db.String, nullable=True)  # string must be a url
+    image = db.Column(db.String, nullable=True)  # string must be a url
     name = db.Column(db.String, nullable=False)
     email = db.Column(db.String, nullable=False)
     phone = db.Column(db.String, nullable=False)
     points = db.Column(db.Integer, nullable=False)
     interests = db.Column(db.JSON, nullable=True, default=list)
-    admin = db.Column(db.Boolean, default=False, nullable=False)
-    gender = db.Column(db.String, nullable=True)
-    graduation_year = db.Column(db.String, nullable=True)
-    academic_level = db.Column(db.String, nullable=True)
-    major = db.Column(db.String, nullable=True)
-    birthday = db.Column(DateTime, nullable=True) 
+    admin = db.Column(db.Boolean, default=False, nullable=False) 
 
     organizations = db.relationship(
         "Organization", 
@@ -72,34 +67,24 @@ class User(db.Model):
     )  
 
     def __init__(self, **kwargs):
-        self.profile_image = kwargs.get("profile_image")
+        self.image = kwargs.get("image")
         self.name = kwargs.get("name")
         self.email = kwargs.get("email")
         self.phone = kwargs.get("phone")
         self.points = kwargs.get("points", 0)
         self.interests = kwargs.get("interests", [])
         self.admin = kwargs.get("admin", False)
-        self.gender = kwargs.get("gender")
-        self.graduation_year = kwargs.get("graduation_year")
-        self.academic_level = kwargs.get("academic_level")
-        self.major = kwargs.get("major")
-        self.birthday = kwargs.get("birthday")
 
     def serialize(self):
         return {
             "id": self.id,
-            "profile_image": self.profile_image,
+            "image": self.image,
             "name": self.name,
             "email": self.email,
             "phone": self.phone,
             "points": self.points,
             "interests": self.interests or [],
             "admin": self.admin,
-            "gender": self.gender,
-            "graduation_year": self.graduation_year,
-            "academic_level": self.academic_level,
-            "major": self.major,
-            "birthday": self.birthday,
             "organizations": [l.serialize() for l in self.organizations],
             "opportunities_hosted": [{"name": l.name} for l in self.opportunities_hosted], 
             "opportunities_involved": [
@@ -113,7 +98,7 @@ class User(db.Model):
                 {
                     "id": friend.id,
                     "name": friend.name,
-                    "profile_image": friend.profile_image
+                    "image": friend.image
                 } for friend in self.friends
             ]
         }
@@ -206,7 +191,7 @@ class Opportunity(db.Model):
         self.address = kwargs.get("address")
         self.nonprofit = kwargs.get("nonprofit")
         self.total_slots = kwargs.get("total_slots")
-        self.image = kwargs.get("image")
+        self.image_url = kwargs.get("image_url")
         self.host_org_id = kwargs.get("host_org_id")
         self.host_user_id = kwargs.get("host_user_id")
 
@@ -221,7 +206,7 @@ class Opportunity(db.Model):
             "address": self.address,
             "nonprofit": self.nonprofit,
             "total_slots": self.total_slots,
-            "image": self.image,
+            "image_url": self.image_url,
             "host_org_id": self.host_org_id,
             "host_user_id": self.host_user_id,
             "involved_users": [

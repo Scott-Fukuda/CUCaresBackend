@@ -387,19 +387,6 @@ def create_user():
                 'message': 'Email already registered'
             }), 400
         
-        # Parse birthday if provided
-        birthday = None
-        if data.get('birthday'):
-            try:
-                birthday = datetime.strptime(data['birthday'], '%Y-%m-%dT%H:%M:%S')
-            except ValueError:
-                try:
-                    birthday = datetime.strptime(data['birthday'], '%Y-%m-%d')
-                except ValueError:
-                    return jsonify({
-                        'message': 'Invalid birthday format. Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS'
-                    }), 400
-        
         # Create new user
         new_user = User(
             profile_image=data.get('profile_image'),
@@ -413,7 +400,7 @@ def create_user():
             graduation_year=data.get('graduation_year'),
             academic_level=data.get('academic_level'),
             major=data.get('major'),
-            birthday=birthday
+            birthday=data.get('birthday')
         )
         
         db.session.add(new_user)
@@ -500,25 +487,10 @@ def update_user(user_id):
             data = request.get_json()
         
         # Only update fields that exist in the model
-        valid_fields = ['profile_image', 'name', 'email', 'phone', 'points', 'interests', 'admin', 'gender', 'graduation_year', 'academic_level', 'major', 'birthday']
+        valid_fields = ['profile_image', 'name', 'email', 'phone', 'points', 'interests', 'admin', 'gender', 'graduation_year', 'academic_level']
         for field in valid_fields:
             if field in data:
-                if field == 'birthday':
-                    # Parse birthday if provided
-                    birthday = None
-                    if data['birthday']:
-                        try:
-                            birthday = datetime.strptime(data['birthday'], '%Y-%m-%dT%H:%M:%S')
-                        except ValueError:
-                            try:
-                                birthday = datetime.strptime(data['birthday'], '%Y-%m-%d')
-                            except ValueError:
-                                return jsonify({
-                                    'message': 'Invalid birthday format. Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS'
-                                }), 400
-                    setattr(user, field, birthday)
-                else:
-                    setattr(user, field, data[field])
+                setattr(user, field, data[field])
         
         db.session.commit()
         return jsonify(user.serialize())
@@ -793,11 +765,11 @@ def create_opportunity():
         db.session.add(new_opportunity)
         db.session.commit()
 
-        # mark host as registered with registered=False
+        # mark host are registered
         user_opportunity = UserOpportunity(
                         user_id=data['host_user_id'],
                         opportunity_id=new_opportunity.id,
-                        registered=False, # Host is initially not registered
+                        registered=True, # Keep marked as not registered
                         attended=False  # Match your model field spelling
                     )
         db.session.add(user_opportunity)

@@ -67,10 +67,10 @@ with app.app_context():
     db.create_all()
 
     # # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
-    # User.__table__.drop(db.engine)
-    # Opportunity.__table__.drop(db.engine)
-    # Organization.__table__.drop(db.engine)
-    # UserOpportunity.__table__.drop(db.engine)
+    User.__table__.drop(db.engine)
+    Opportunity.__table__.drop(db.engine)
+    Organization.__table__.drop(db.engine)
+    UserOpportunity.__table__.drop(db.engine)
 
 
 # Helper function to handle pagination
@@ -793,11 +793,11 @@ def create_opportunity():
         db.session.add(new_opportunity)
         db.session.commit()
 
-        # mark host as registered with registered=False
+        # mark host are registered
         user_opportunity = UserOpportunity(
                         user_id=data['host_user_id'],
                         opportunity_id=new_opportunity.id,
-                        registered=False, # Host is initially not registered
+                        registered=True, # Keep marked as not registered
                         attended=False  # Match your model field spelling
                     )
         db.session.add(user_opportunity)
