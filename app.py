@@ -2,7 +2,7 @@ import json
 import os
 import uuid
 from flask import Flask, request, jsonify, send_from_directory
-from db import db, User, Organization, Opportunity, UserOpportunity
+from db import db, User, Organization, Opportunity, UserOpportunity, Friendship
 
 from datetime import datetime
 from flask_cors import CORS
@@ -10,6 +10,7 @@ from werkzeug.utils import secure_filename
 import firebase_admin
 from firebase_admin import auth, credentials, initialize_app
 from dotenv import load_dotenv
+import boto3
 
 # define db filename
 db_filename = "cucares.db"
@@ -21,11 +22,34 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# restrict API access to requests from secure origin
-CORS(app, origins=["http://localhost:5173", "http://127.0.0.1:5173"])
-
 # Load environment variables from .env file
 load_dotenv()
+
+# S3 configuration (with fallback for development)
+try:
+    S3_BUCKET = os.environ.get("S3_BUCKET")
+    AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    AWS_DEFAULT_REGION = os.environ.get("AWS_DEFAULT_REGION")
+    
+    if all([S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION]):
+        s3 = boto3.client(
+            "s3",
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+            region_name=AWS_DEFAULT_REGION
+        )
+        print("S3 client initialized successfully")
+    else:
+        s3 = None
+        print("Warning: S3 environment variables not set. S3 functionality will be disabled.")
+except Exception as e:
+    s3 = None
+    print(f"Warning: S3 client initialization failed: {e}")
+    print("S3 functionality will be disabled.")
+
+# restrict API access to requests from secure origin
+CORS(app, origins=["http://localhost:5173", "http://127.0.0.1:5173"])
 
 # Initialize Firebase Admin SDK
 try:
@@ -71,6 +95,7 @@ with app.app_context():
     # Opportunity.__table__.drop(db.engine)
     # Organization.__table__.drop(db.engine)
     # UserOpportunity.__table__.drop(db.engine)
+    # Friendship.__table__.drop(db.engine)
 
 
 # Helper function to handle pagination
@@ -737,16 +762,10 @@ def create_opportunity():
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'cause', 'duration', 'description', 'address', 'nonprofit', 'total_slots']:
+            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'cause', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved']:
                 if field in request.form:
                     data[field] = request.form[field]
             
-            # Handle image upload
-            if 'image' in request.files:
-                file = request.files['image']
-                image_path = save_opportunity_image(file, None)  # Will be updated after opportunity creation
-                if image_path:
-                    data['image'] = image_path
         else:
             # Handle JSON data
             data = request.get_json()
@@ -980,10 +999,16 @@ def delete_opportunity(opp_id):
 # Friends Endpoints
 @app.route('/api/users/<int:user_id>/friends', methods=['GET'])
 def get_user_friends(user_id):
-    """Get all friends of a user"""
+    """Get all accepted friends of a user"""
     try:
-        user = User.query.get_or_404(user_id)
-        friends = user.friends.all()
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({
+                'message': 'User not found',
+                'error': f'User with ID {user_id} does not exist'
+            }), 404
+        
+        friends = user.get_accepted_friends()
         
         return jsonify({
             'friends': [
@@ -1003,55 +1028,242 @@ def get_user_friends(user_id):
             'error': str(e)
         }), 500
 
+@app.route('/api/users/<int:user_id>/friend-requests', methods=['GET'])
+def get_friend_requests(user_id):
+    """Get pending friend requests for a user"""
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({
+                'message': 'User not found',
+                'error': f'User with ID {user_id} does not exist'
+            }), 404
+        
+        # Get pending requests where user is the receiver
+        pending_requests = Friendship.query.filter_by(
+            receiver_id=user_id, 
+            accepted=False
+        ).all()
+        
+        return jsonify({
+            'friend_requests': [
+                {
+                    'id': request.id,
+                    'requester_name': User.query.get(request.requester_id).name,
+                    'requester_profile_image': User.query.get(request.requester_id).profile_image
+                } for request in pending_requests
+            ]
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch friend requests',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/friendships', methods=['GET'])
+def get_all_friendships():
+    """Get all friendships in the system (admin endpoint)"""
+    try:
+        # Get all friendships
+        friendships = Friendship.query.all()
+        
+        return jsonify({
+            'friendships': [
+                {
+                    'id': friendship.id,
+                    'accepted': friendship.accepted,
+                    'requester_name': User.query.get(friendship.requester_id).name,
+                    'receiver_name': User.query.get(friendship.receiver_id).name
+                } for friendship in friendships
+            ]
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch friendships',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/users/<int:user_id>/friendships', methods=['GET'])
+def get_user_friendships(user_id):
+    """Get all friendships for a specific user (both sent and received)"""
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({
+                'message': 'User not found',
+                'error': f'User with ID {user_id} does not exist'
+            }), 404
+        
+        # Get all friendships where user is either requester or receiver
+        friendships = Friendship.query.filter(
+            (Friendship.requester_id == user_id) | (Friendship.receiver_id == user_id)
+        ).all()
+        
+        return jsonify({
+            'friendships': [
+                {
+                    'id': friendship.id,
+                    'accepted': friendship.accepted,
+                    'requester_name': User.query.get(friendship.requester_id).name,
+                    'receiver_name': User.query.get(friendship.receiver_id).name,
+                    'is_requester': friendship.requester_id == user_id
+                } for friendship in friendships
+            ]
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch friendships',
+            'error': str(e)
+        }), 500
 
 @app.route('/api/users/<int:user_id>/friends', methods=['POST'])
-def add_friend(user_id):
-    """Add a friend to a user"""
+def send_friend_request(user_id):
+    """Send a friend request"""
     try:
         data = request.get_json()
-        friend_id = data.get('friend_id')
+        receiver_id = data.get('receiver_id')
         
-        if not friend_id:
-            return jsonify({'error': 'friend_id is required'}), 400
+        if not receiver_id:
+            return jsonify({'error': 'receiver_id is required'}), 400
         
-        user = User.query.get_or_404(user_id)
-        friend = User.query.get_or_404(friend_id)
+        # Check if trying to send request to self
+        if user_id == receiver_id:
+            return jsonify({'error': 'Cannot send friend request to yourself'}), 400
         
-        # Check if they're already friends
-        if friend in user.friends:
-            return jsonify({'message': 'Already friends'}), 200
+        # Check if users exist
+        requester = User.query.get(user_id)
+        if not requester:
+            return jsonify({
+                'message': 'Requester not found',
+                'error': f'User with ID {user_id} does not exist'
+            }), 404
         
-        # Check if trying to add self as friend
-        if user_id == friend_id:
-            return jsonify({'error': 'Cannot add yourself as friend'}), 400
+        receiver = User.query.get(receiver_id)
+        if not receiver:
+            return jsonify({
+                'message': 'Receiver not found',
+                'error': f'User with ID {receiver_id} does not exist'
+            }), 404
         
-        # Add friend (this will automatically add the reverse relationship)
-        user.friends.append(friend)
+        # Check if friendship already exists
+        existing_friendship = Friendship.query.filter(
+            ((Friendship.requester_id == user_id) & (Friendship.receiver_id == receiver_id)) |
+            ((Friendship.requester_id == receiver_id) & (Friendship.receiver_id == user_id))
+        ).first()
+        
+        if existing_friendship:
+            if existing_friendship.accepted:
+                return jsonify({'message': 'Already friends'}), 200
+            else:
+                return jsonify({'message': 'Friend request already sent'}), 200
+        
+        # Create new friendship request
+        friendship = Friendship(accepted=False)
+        friendship.requester_id = user_id
+        friendship.receiver_id = receiver_id
+        
+        db.session.add(friendship)
         db.session.commit()
         
-        return jsonify({'message': 'Friend added successfully'}), 201
+        return jsonify({'message': 'Friend request sent successfully'}), 201
     
     except Exception as e:
         db.session.rollback()
         return jsonify({
-            'message': 'Failed to add friend',
+            'message': 'Failed to send friend request',
             'error': str(e)
         }), 500
 
+@app.route('/api/friendships/<int:friendship_id>/accept', methods=['PUT'])
+def accept_friend_request(friendship_id):
+    """Accept a friend request"""
+    try:
+        friendship = Friendship.query.get(friendship_id)
+        if not friendship:
+            return jsonify({
+                'message': 'Friendship not found',
+                'error': f'Friendship with ID {friendship_id} does not exist'
+            }), 404
+        
+        if friendship.accepted:
+            return jsonify({'message': 'Friend request already accepted'}), 200
+        
+        friendship.accepted = True
+        db.session.commit()
+        
+        return jsonify({'message': 'Friend request accepted successfully'}), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'message': 'Failed to accept friend request',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/friendships/<int:friendship_id>/reject', methods=['PUT'])
+def reject_friend_request(friendship_id):
+    """Reject a friend request"""
+    try:
+        friendship = Friendship.query.get(friendship_id)
+        if not friendship:
+            return jsonify({
+                'message': 'Friendship not found',
+                'error': f'Friendship with ID {friendship_id} does not exist'
+            }), 404
+        
+        db.session.delete(friendship)
+        db.session.commit()
+        
+        return jsonify({'message': 'Friend request rejected successfully'}), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'message': 'Failed to reject friend request',
+            'error': str(e)
+        }), 500
 
 @app.route('/api/users/<int:user_id>/friends/<int:friend_id>', methods=['DELETE'])
 def remove_friend(user_id, friend_id):
-    """Remove a friend from a user"""
+    """Remove a friend (delete friendship)"""
     try:
-        user = User.query.get_or_404(user_id)
-        friend = User.query.get_or_404(friend_id)
+        # Check if users exist
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({
+                'message': 'User not found',
+                'error': f'User with ID {user_id} does not exist'
+            }), 404
         
-        # Check if they're friends
-        if friend not in user.friends:
-            return jsonify({'message': 'Not friends'}), 200
+        friend = User.query.get(friend_id)
+        if not friend:
+            return jsonify({
+                'message': 'Friend not found',
+                'error': f'User with ID {friend_id} does not exist'
+            }), 404
         
-        # Remove friend (this will automatically remove the reverse relationship)
-        user.friends.remove(friend)
+        # Find the friendship between these users
+        friendship = Friendship.query.filter(
+            ((Friendship.requester_id == user_id) & (Friendship.receiver_id == friend_id)) |
+            ((Friendship.requester_id == friend_id) & (Friendship.receiver_id == user_id))
+        ).first()
+        
+        if not friendship:
+            return jsonify({
+                'message': 'Friendship not found',
+                'error': f'No friendship exists between users {user_id} and {friend_id}'
+            }), 404
+        
+        if not friendship.accepted:
+            return jsonify({
+                'message': 'Friendship request not yet accepted',
+                'error': 'Cannot remove a pending friend request. Use reject instead.'
+            }), 400
+        
+        db.session.delete(friendship)
         db.session.commit()
         
         return jsonify({'message': 'Friend removed successfully'}), 200
@@ -1063,21 +1275,62 @@ def remove_friend(user_id, friend_id):
             'error': str(e)
         }), 500
 
-
 @app.route('/api/users/<int:user_id>/friends/check/<int:friend_id>', methods=['GET'])
 def check_friendship(user_id, friend_id):
-    """Check if two users are friends"""
+    """Check friendship status between two users"""
     try:
-        user = User.query.get_or_404(user_id)
-        friend = User.query.get_or_404(friend_id)
+        # Check if users exist
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({
+                'message': 'User not found',
+                'error': f'User with ID {user_id} does not exist'
+            }), 404
         
-        are_friends = friend in user.friends
+        friend = User.query.get(friend_id)
+        if not friend:
+            return jsonify({
+                'message': 'Friend not found',
+                'error': f'User with ID {friend_id} does not exist'
+            }), 404
         
-        return jsonify({
-            'are_friends': are_friends,
-            'user_id': user_id,
-            'friend_id': friend_id
-        })
+        # Find the friendship between these users
+        friendship = Friendship.query.filter(
+            ((Friendship.requester_id == user_id) & (Friendship.receiver_id == friend_id)) |
+            ((Friendship.requester_id == friend_id) & (Friendship.receiver_id == user_id))
+        ).first()
+        
+        if not friendship:
+            return jsonify({
+                'status': 'no_friendship',
+                'are_friends': False,
+                'user_id': user_id,
+                'friend_id': friend_id
+            })
+        
+        if friendship.accepted:
+            return jsonify({
+                'status': 'friends',
+                'are_friends': True,
+                'user_id': user_id,
+                'friend_id': friend_id
+            })
+        else:
+            # Check who sent the request
+            if friendship.requester_id == user_id:
+                return jsonify({
+                    'status': 'request_sent',
+                    'are_friends': False,
+                    'user_id': user_id,
+                    'friend_id': friend_id
+                })
+            else:
+                return jsonify({
+                    'status': 'request_received',
+                    'are_friends': False,
+                    'user_id': user_id,
+                    'friend_id': friend_id
+                })
     
     except Exception as e:
         return jsonify({
