@@ -22,14 +22,28 @@ user_organization = db.Table(
     db.Column("organization_id", db.Integer, db.ForeignKey("organization.id"), primary_key=True)
 )
 
+# Friendship model
+class Friendship(db.Model):
+    __tablename__ = "friendship"
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    accepted = db.Column(db.Boolean, default=False, nullable=False)
+    
+    # Relationships - these will be set during request processing
+    requester_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    receiver_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    
+    requester = db.relationship("User", foreign_keys=[requester_id], back_populates="sent_friend_requests")
+    receiver = db.relationship("User", foreign_keys=[receiver_id], back_populates="received_friend_requests")
 
+    def __init__(self, **kwargs):
+        self.accepted = kwargs.get("accepted", False)
+        # requester_id and receiver_id will be set during request processing
 
-# Friends association table (self-referential many-to-many)
-user_friends = db.Table(
-    "user_friends",
-    db.Column("user_id", db.Integer, db.ForeignKey("user.id"), primary_key=True),
-    db.Column("friend_id", db.Integer, db.ForeignKey("user.id"), primary_key=True)
-)
+    def serialize(self):
+        return {
+            "id": self.id,
+            "accepted": self.accepted
+        }
 
 class User(db.Model):
     __tablename__ = "user"
@@ -45,7 +59,8 @@ class User(db.Model):
     graduation_year = db.Column(db.String, nullable=True)
     academic_level = db.Column(db.String, nullable=True)
     major = db.Column(db.String, nullable=True)
-    birthday = db.Column(DateTime, nullable=True) 
+    birthday = db.Column(DateTime, nullable=True)
+    registration_date = db.Column(DateTime, nullable=False, default=datetime.datetime.utcnow) 
 
     organizations = db.relationship(
         "Organization", 
@@ -61,15 +76,20 @@ class User(db.Model):
         back_populates="host_user"
     )
 
-    # Friends relationship (self-referential many-to-many)
-    friends = db.relationship(
-        "User",
-        secondary=user_friends,
-        primaryjoin=(user_friends.c.user_id == id),
-        secondaryjoin=(user_friends.c.friend_id == id),
-        backref=db.backref("friend_of", lazy="dynamic"),
-        lazy="dynamic"
-    )  
+    # Friendship relationships
+    sent_friend_requests = db.relationship(
+        "Friendship",
+        foreign_keys=[Friendship.requester_id],
+        back_populates="requester",
+        cascade="all, delete-orphan"
+    )
+    
+    received_friend_requests = db.relationship(
+        "Friendship",
+        foreign_keys=[Friendship.receiver_id],
+        back_populates="receiver",
+        cascade="all, delete-orphan"
+    )
 
     def __init__(self, **kwargs):
         self.profile_image = kwargs.get("profile_image")
@@ -84,6 +104,7 @@ class User(db.Model):
         self.academic_level = kwargs.get("academic_level")
         self.major = kwargs.get("major")
         self.birthday = kwargs.get("birthday")
+        self.registration_date = kwargs.get("registration_date", datetime.datetime.utcnow())
 
     def serialize(self):
         return {
@@ -100,6 +121,7 @@ class User(db.Model):
             "academic_level": self.academic_level,
             "major": self.major,
             "birthday": self.birthday,
+            "registration_date": self.registration_date,
             "organizations": [l.serialize() for l in self.organizations],
             "opportunities_hosted": [{"name": l.name} for l in self.opportunities_hosted], 
             "opportunities_involved": [
@@ -114,9 +136,37 @@ class User(db.Model):
                     "id": friend.id,
                     "name": friend.name,
                     "profile_image": friend.profile_image
-                } for friend in self.friends
+                } for friend in self.get_accepted_friends()
             ]
         }
+    
+    def get_accepted_friends(self):
+        """Get all accepted friends for this user"""
+        # Get friendships where this user is the requester and they're accepted
+        requester_friendships = Friendship.query.filter_by(
+            requester_id=self.id, 
+            accepted=True
+        ).all()
+        
+        # Get friendships where this user is the receiver and they're accepted
+        receiver_friendships = Friendship.query.filter_by(
+            receiver_id=self.id, 
+            accepted=True
+        ).all()
+        
+        # Get the friend users
+        friends = []
+        for friendship in requester_friendships:
+            friend = User.query.get(friendship.receiver_id)
+            if friend:
+                friends.append(friend)
+        
+        for friendship in receiver_friendships:
+            friend = User.query.get(friendship.requester_id)
+            if friend:
+                friends.append(friend)
+        
+        return friends
 
 class Organization(db.Model):
     __tablename__ = "organization"
@@ -186,6 +236,7 @@ class Opportunity(db.Model):
     nonprofit = db.Column(db.String, nullable=True)
     total_slots = db.Column(db.Integer, nullable=True)
     image = db.Column(db.String, nullable=True)
+    approved = db.Column(db.Boolean, default=False, nullable=False)
 
     host_org_id = db.Column(db.Integer, db.ForeignKey("organization.id"))
     host_org = db.relationship("Organization", back_populates="opportunities_hosted")
@@ -209,6 +260,7 @@ class Opportunity(db.Model):
         self.image = kwargs.get("image")
         self.host_org_id = kwargs.get("host_org_id")
         self.host_user_id = kwargs.get("host_user_id")
+        self.approved = kwargs.get("approved", False)
 
     def serialize(self):
         return {
@@ -224,6 +276,7 @@ class Opportunity(db.Model):
             "image": self.image,
             "host_org_id": self.host_org_id,
             "host_user_id": self.host_user_id,
+            "approved": self.approved,
             "involved_users": [
                 {
                     "user": uo.user.name,
