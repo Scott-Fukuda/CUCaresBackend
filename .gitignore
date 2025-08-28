@@ -1,3 +1,7 @@
 firebase-service-account.json
 .env
 .history/
+*.db
+instance/
+__pycache__/
+*.pyc
