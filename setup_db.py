@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Database setup script for PostgreSQL migration
+Database setup script for PostgreSQL migration (psycopg3)
 """
 import os
 from app import app, db
@@ -11,7 +11,7 @@ def setup_database():
     with app.app_context():
         print("Creating database tables...")
         db.create_all()
-        print("✅ Database tables created successfully!")
+        print("Database tables created successfully!")
         
         # Check if we have any data
         user_count = User.query.count()

@@ -50,8 +50,15 @@ CORS(app, origins=["https://campuscares.net", "https://www.campuscares.net"])
 
 # Initialize Firebase Admin SDK
 try:
-    # Check if environment variable is set
-    if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
+    # Check if Firebase service account JSON is provided as environment variable
+    if "FIREBASE_SERVICE_ACCOUNT" in os.environ:
+        # Use the JSON content directly from environment variable
+        import json
+        service_account_info = json.loads(os.environ["FIREBASE_SERVICE_ACCOUNT"])
+        cred = credentials.Certificate(service_account_info)
+        firebase_admin.initialize_app(cred)
+        print("Firebase Admin SDK initialized successfully with environment variable")
+    elif "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
         # Get the path to the service account file
         service_account_path = os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
         
@@ -68,8 +75,9 @@ try:
             print(f"Warning: Service account file not found at: {service_account_path}")
             firebase_admin.initialize_app()
     else:
-        print("Warning: GOOGLE_APPLICATION_CREDENTIALS environment variable not set")
-        print("Firebase authentication will not work without proper credentials")
+        print("Warning: Firebase credentials not found")
+        print("Set FIREBASE_SERVICE_ACCOUNT environment variable with JSON content")
+        print("Or set GOOGLE_APPLICATION_CREDENTIALS to point to service account file")
         # Initialize with default app (for development/testing)
         firebase_admin.initialize_app()
 except Exception as e:
@@ -80,6 +88,9 @@ except Exception as e:
 database_url = os.environ.get('DATABASE_URL', f"sqlite:///{db_filename}")
 if database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
+# For psycopg3, ensure we're using the correct driver
+if "postgresql://" in database_url and "psycopg" not in database_url:
+    database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ECHO"] = os.environ.get('FLASK_ENV') == 'development'
