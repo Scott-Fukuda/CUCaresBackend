@@ -4,7 +4,7 @@ import uuid
 from flask import Flask, request, jsonify, send_from_directory
 from db import db, User, Organization, Opportunity, UserOpportunity, Friendship
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import firebase_admin
@@ -17,10 +17,7 @@ db_filename = "cucares.db"
 app = Flask(__name__)
 
 # File upload configuration
-UPLOAD_FOLDER = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Load environment variables from .env file
 load_dotenv()
@@ -49,7 +46,7 @@ except Exception as e:
     print("S3 functionality will be disabled.")
 
 # restrict API access to requests from secure origin
-CORS(app, origins=["http://localhost:5173", "http://127.0.0.1:5173"])
+CORS(app, origins=["https://campuscares.net", "https://www.campuscares.net"])
 
 # Initialize Firebase Admin SDK
 try:
@@ -102,13 +99,74 @@ with app.app_context():
 def paginate(query, page=1, per_page=20):
     return query.paginate(page=page, per_page=per_page, error_out=False)
 
+# Authentication middleware function
+def require_auth(f):
+    """Decorator to require Firebase authentication for endpoints"""
+    def decorated_function(*args, **kwargs):
+        try:
+            # Get the Authorization header
+            auth_header = request.headers.get('Authorization')
+            
+            if not auth_header:
+                return jsonify({
+                    'error': 'Authorization header is required',
+                    'message': 'Please provide a valid Firebase ID token'
+                }), 401
+            
+            # Check if it's a Bearer token
+            if not auth_header.startswith('Bearer '):
+                return jsonify({
+                    'error': 'Invalid authorization format',
+                    'message': 'Authorization header must be in format: Bearer <token>'
+                }), 401
+            
+            # Extract the token
+            token = auth_header.split('Bearer ')[1]
+            
+            if not token:
+                return jsonify({
+                    'error': 'Token is required',
+                    'message': 'Please provide a valid Firebase ID token'
+                }), 401
+            
+            # Verify the token
+            verification_result = verify_firebase_token(token)
+            
+            if not verification_result['success']:
+                return jsonify({
+                    'error': 'Invalid token',
+                    'message': 'The provided token is invalid or expired',
+                    'details': verification_result.get('error', 'Unknown error')
+                }), 401
+            
+            # Attach user info to request
+            request.user = {
+                'uid': verification_result['user_id'],
+                'email': verification_result['email'],
+                'name': verification_result['name'],
+                'picture': verification_result['picture']
+            }
+            
+            return f(*args, **kwargs)
+            
+        except Exception as e:
+            return jsonify({
+                'error': 'Authentication failed',
+                'message': 'An error occurred during authentication',
+                'details': str(e)
+            }), 500
+    
+    # Preserve the original function name for debugging
+    decorated_function.__name__ = f.__name__
+    return decorated_function
+
 # Helper functions for file uploads
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def save_user_image(file, email):
-    """Save user image with email-based filename"""
+    """Save user image to S3 with email-based filename"""
     if file and allowed_file(file.filename):
         # Get file extension
         file_extension = file.filename.rsplit('.', 1)[1].lower()
@@ -117,20 +175,21 @@ def save_user_image(file, email):
         original_filename = secure_filename(file.filename.rsplit('.', 1)[0])
         filename = f"{original_filename}_{email}.{file_extension}"
         
-        # Ensure upload directory exists
-        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        # Upload to S3
+        s3.upload_fileobj(
+            file,
+            S3_BUCKET,
+            filename,
+            ExtraArgs={"ContentType": file.content_type}
+        )
         
-        # Save file
-        file_path = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(file_path)
-        
-        # Return the relative path for database storage
-        return f"/static/uploads/{filename}"
+        # Return the S3 URL
+        return f"https://{S3_BUCKET}.s3.amazonaws.com/{filename}"
     
     return None
 
 def save_opportunity_image(file, opportunity_id):
-    """Save opportunity image with opportunity_id-based filename"""
+    """Save opportunity image to S3 with opportunity_id-based filename"""
     if file and allowed_file(file.filename):
         # Get file extension
         file_extension = file.filename.rsplit('.', 1)[1].lower()
@@ -138,15 +197,16 @@ def save_opportunity_image(file, opportunity_id):
         # Create filename: image_{opportunity_id}.extension
         filename = f"image_{opportunity_id}.{file_extension}"
         
-        # Ensure upload directory exists
-        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        # Upload to S3
+        s3.upload_fileobj(
+            file,
+            S3_BUCKET,
+            filename,
+            ExtraArgs={"ContentType": file.content_type}
+        )
         
-        # Save file
-        file_path = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(file_path)
-        
-        # Return the relative path for database storage
-        return f"/static/uploads/{filename}"
+        # Return the S3 URL
+        return f"https://{S3_BUCKET}.s3.amazonaws.com/{filename}"
     
     return None
 
@@ -170,6 +230,7 @@ def verify_firebase_token(token):
 
 # Special Endpoints
 @app.route('/api/register-opp', methods=['POST'])
+@require_auth
 def register_user_for_opportunity():
     data = request.get_json()
     user_id = data.get('user_id')
@@ -198,6 +259,7 @@ def register_user_for_opportunity():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/unregister-opp', methods=['POST'])
+@require_auth
 def unregister_user_from_opportunity():
     """Unregister a user from an opportunity"""
     data = request.get_json()
@@ -241,6 +303,7 @@ def unregister_user_from_opportunity():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/register-org', methods=['POST'])
+@require_auth
 def register_user_for_organization():
     data = request.get_json()
     user_id = data.get('user_id')
@@ -269,6 +332,7 @@ def register_user_for_organization():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/unregister-org', methods=['POST'])
+@require_auth
 def unregister_user_from_organization():
     """Unregister a user from an organization"""
     data = request.get_json()
@@ -299,6 +363,7 @@ def unregister_user_from_organization():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/attendance', methods=['PUT'])
+@require_auth
 def marked_as_attended():
     data = request.get_json()
     user_id = data.get('user_id')
@@ -346,9 +411,16 @@ def marked_as_attended():
 
 # User Endpoints
 @app.route('/api/users', methods=['POST'])
+@require_auth
 def create_user():
     """Create a new user with optional file upload"""
     try:
+        # Access authenticated user information
+        # request.user contains: {'uid': 'firebase_uid', 'email': 'user@example.com', 'name': 'User Name', 'picture': 'profile_url'}
+        authenticated_user = request.user
+        print(f"Authenticated user: {authenticated_user}")
+        
+        # Check if this is a multipart form (file upload) or JSON
         # Check if this is a multipart form (file upload) or JSON
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
@@ -359,11 +431,10 @@ def create_user():
             interests = request.form.get('interests', '[]')  # Default to empty JSON array string
             
             # Validate required fields
-            required_fields = ['name', 'email', 'phone']
-            if not all(field in [name, email, phone]):
+            if not name or not email or not phone:
                 return jsonify({
                     'message': 'Missing required fields',
-                    'required': required_fields
+                    'required': ['name', 'email', 'phone']
                 }), 400
             
             # Handle image upload
@@ -425,6 +496,25 @@ def create_user():
                         'message': 'Invalid birthday format. Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS'
                     }), 400
         
+        # Check if user should be admin based on email
+        is_admin = data.get('admin', False)
+        default_admin_emails = os.environ.get('DEFAULT_ADMIN_EMAILS', '')
+        if default_admin_emails:
+            try:
+                # Try to parse as JSON first (in case it's a JSON array string)
+                import json
+                try:
+                    admin_email_list = json.loads(default_admin_emails)
+                except json.JSONDecodeError:
+                    # If not JSON, parse as hyphen-separated list
+                    admin_email_list = [email.strip() for email in default_admin_emails.split('-')]
+                
+                if data['email'] in admin_email_list:
+                    is_admin = True
+                print(f"DEBUG: Admin email list = {admin_email_list}, User email = {data['email']}, is_admin = {is_admin}")
+            except Exception as e:
+                print(f"Warning: Error parsing DEFAULT_ADMIN_EMAILS: {e}")
+        
         # Create new user
         new_user = User(
             profile_image=data.get('profile_image'),
@@ -433,7 +523,7 @@ def create_user():
             phone=data.get('phone'),
             points=data.get('points', 0),
             interests=data.get('interests', []),
-            admin=data.get('admin', False),
+            admin=is_admin,
             gender=data.get('gender'),
             graduation_year=data.get('graduation_year'),
             academic_level=data.get('academic_level'),
@@ -464,7 +554,7 @@ def get_users():
         paginated_users = paginate(users, page, per_page)
         
         return jsonify({
-            'users': [user.serialize() for user in paginated_users.items],
+            'users': [{"id": user.id, "name": user.name} for user in paginated_users.items],
             'pagination': {
                 'page': paginated_users.page,
                 'per_page': paginated_users.per_page,
@@ -479,6 +569,7 @@ def get_users():
         }), 500
 
 @app.route('/api/users/<int:user_id>', methods=['GET'])
+@require_auth
 def get_user(user_id):
     """Get a single user"""
     try:
@@ -492,6 +583,7 @@ def get_user(user_id):
         }), 500
 
 @app.route('/api/users/<int:user_id>', methods=['PUT'])
+@require_auth
 def update_user(user_id):
     """Update a user with optional file upload"""
     try:
@@ -556,6 +648,7 @@ def update_user(user_id):
         }), 500
 
 @app.route('/api/users/<int:user_id>', methods=['DELETE'])
+@require_auth
 def delete_user(user_id):
     """Delete a user"""
     try:
@@ -575,6 +668,7 @@ def delete_user(user_id):
 
 # Organization Endpoints
 @app.route('/api/orgs', methods=['POST'])
+@require_auth
 def create_organization():
     """Create a new organization"""
     try:
@@ -624,6 +718,7 @@ def create_organization():
         }), 500
 
 @app.route('/api/orgs', methods=['GET'])
+@require_auth
 def get_organizations():
     """Get all organizations with pagination"""
     try:
@@ -649,6 +744,7 @@ def get_organizations():
         }), 500
 
 @app.route('/api/orgs/approved', methods=['GET'])
+@require_auth
 def get_approved_organizations():
     """Get all approved organizations with pagination"""
     try:
@@ -675,6 +771,7 @@ def get_approved_organizations():
 
 
 @app.route('/api/orgs/unapproved', methods=['GET'])
+@require_auth
 def get_unapproved_organizations():
     """Get all unapproved organizations with pagination"""
     try:
@@ -700,6 +797,7 @@ def get_unapproved_organizations():
         }), 500
 
 @app.route('/api/orgs/<int:org_id>', methods=['GET'])
+@require_auth
 def get_organization(org_id):
     """Get a single organization"""
     try:
@@ -713,6 +811,7 @@ def get_organization(org_id):
         }), 500
 
 @app.route('/api/orgs/<int:org_id>', methods=['PUT'])
+@require_auth
 def update_organization(org_id):
     """Update an organization"""
     try:
@@ -736,6 +835,7 @@ def update_organization(org_id):
         }), 500
 
 @app.route('/api/orgs/<int:org_id>', methods=['DELETE'])
+@require_auth
 def delete_organization(org_id):
     """Delete an organization"""
     try:
@@ -755,6 +855,7 @@ def delete_organization(org_id):
 
 # Opportunity Endpoints
 @app.route('/api/opps', methods=['POST'])
+@require_auth
 def create_opportunity():
     """Create a new opportunity with optional file upload"""
     try:
@@ -762,7 +863,7 @@ def create_opportunity():
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'cause', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved']:
+            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name']:
                 if field in request.form:
                     data[field] = request.form[field]
             
@@ -771,7 +872,7 @@ def create_opportunity():
             data = request.get_json()
         
         # Validate required fields
-        required_fields = ['name', 'host_org_id', 'host_user_id', 'date', 'cause', 'duration']
+        required_fields = ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'duration']
         if not all(field in data for field in required_fields):
             return jsonify({
                 'message': 'Missing required fields',
@@ -794,19 +895,28 @@ def create_opportunity():
                 'error': f'Organization with ID {data["host_org_id"]} not found'
             }), 404
         
+        # Set host_org_name from organization if not provided
+        if not data.get('host_org_name'):
+            data['host_org_name'] = host_org.name
+        
+        # Parse date and add 4 hours for GMT conversion
+        parsed_date = datetime.strptime(data['date'], '%Y-%m-%dT%H:%M:%S')
+        gmt_date = parsed_date + timedelta(hours=4)
+        
         # Create new opportunity
         new_opportunity = Opportunity(
             name=data['name'],
             description=data.get('description'),
-            date=datetime.strptime(data['date'], '%Y-%m-%dT%H:%M:%S'), # converts to datetime object
+            date=gmt_date, # GMT time (4 hours added)
             duration=data['duration'],
-            cause=data.get('cause'),
+            causes=data.get('causes'),
             address=data.get('address'),
             nonprofit=data.get('nonprofit'),
             total_slots=data.get('total_slots'),
             image=data.get('image'),
             host_org_id=data['host_org_id'],
-            host_user_id=data['host_user_id']
+            host_user_id=data['host_user_id'],
+            host_org_name=data['host_org_name']
         )
         
         db.session.add(new_opportunity)
@@ -832,6 +942,7 @@ def create_opportunity():
         }), 500
 
 @app.route('/api/opps', methods=['GET'])
+@require_auth
 def get_opportunities():
     """Get all opportunities with pagination"""
     try:
@@ -856,7 +967,102 @@ def get_opportunities():
             'error': str(e)
         }), 500
 
+@app.route('/api/opps/current', methods=['GET'])
+@require_auth
+def get_current_opportunities():
+    """Get current opportunities (whose start dates haven't passed) with pagination"""
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 20))
+        
+        # Get current datetime
+        current_datetime = datetime.utcnow()
+        
+        # Filter opportunities where date is in the future
+        current_opportunities = Opportunity.query.filter(
+            Opportunity.date > current_datetime
+        ).order_by(Opportunity.date.asc())  # Order by date ascending (earliest first)
+        
+        paginated_opps = paginate(current_opportunities, page, per_page)
+        
+        return jsonify({
+            'opportunities': [opp.serialize() for opp in paginated_opps.items],
+            'pagination': {
+                'page': paginated_opps.page,
+                'per_page': paginated_opps.per_page,
+                'total': paginated_opps.total
+            },
+            'current_datetime': current_datetime.isoformat()
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch current opportunities',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/opps/approved', methods=['GET'])
+@require_auth
+def get_approved_opportunities():
+    """Get approved opportunities with pagination"""
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 20))
+        
+        # Filter opportunities where approved is True
+        approved_opportunities = Opportunity.query.filter(
+            Opportunity.approved == True
+        ).order_by(Opportunity.id.desc())
+        
+        paginated_opps = paginate(approved_opportunities, page, per_page)
+        
+        return jsonify({
+            'opportunities': [opp.serialize() for opp in paginated_opps.items],
+            'pagination': {
+                'page': paginated_opps.page,
+                'per_page': paginated_opps.per_page,
+                'total': paginated_opps.total
+            }
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch approved opportunities',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/opps/unapproved', methods=['GET'])
+@require_auth
+def get_unapproved_opportunities():
+    """Get unapproved opportunities with pagination"""
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 20))
+        
+        # Filter opportunities where approved is False
+        unapproved_opportunities = Opportunity.query.filter(
+            Opportunity.approved == False
+        ).order_by(Opportunity.id.desc())
+        
+        paginated_opps = paginate(unapproved_opportunities, page, per_page)
+        
+        return jsonify({
+            'opportunities': [opp.serialize() for opp in paginated_opps.items],
+            'pagination': {
+                'page': paginated_opps.page,
+                'per_page': paginated_opps.per_page,
+                'total': paginated_opps.total
+            }
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch unapproved opportunities',
+            'error': str(e)
+        }), 500
+
 @app.route('/api/opps/<int:opp_id>', methods=['GET'])
+@require_auth
 def get_opportunity(opp_id):
     """Get a single opportunity"""
     try:
@@ -870,6 +1076,7 @@ def get_opportunity(opp_id):
         }), 500
 
 @app.route('/api/opps/<int:opp_id>', methods=['PUT'])
+@require_auth
 def update_opportunity(opp_id):
     """Update an opportunity with optional file upload"""
     try:
@@ -880,7 +1087,7 @@ def update_opportunity(opp_id):
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'description', 'date', 'address', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id']:
+            for field in ['name', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id', 'host_org_name']:
                 if field in request.form:
                     data[field] = request.form[field]
             
@@ -895,8 +1102,8 @@ def update_opportunity(opp_id):
             data = request.get_json()
         
         # Only update fields that exist in the model
-        valid_fields = ['name', 'description', 'date', 'address', 'nonprofit', 'total_slots', 'image',
-                       'host_org_id', 'host_user_id']       
+        valid_fields = ['name', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'image',
+                       'host_org_id', 'host_user_id', 'host_org_name']       
         
         for field in valid_fields:
             if field in data:
@@ -967,6 +1174,9 @@ def update_opportunity(opp_id):
                         db.session.commit()
                 else:
                     setattr(opp, field, data[field])
+        
+        # Commit all changes
+        db.session.commit()
         return jsonify(opp.serialize())
     
     
@@ -978,6 +1188,7 @@ def update_opportunity(opp_id):
         }), 500
 
 @app.route('/api/opps/<int:opp_id>', methods=['DELETE'])
+@require_auth
 def delete_opportunity(opp_id):
     """Delete an opportunity"""
     try:
@@ -998,6 +1209,7 @@ def delete_opportunity(opp_id):
 
 # Friends Endpoints
 @app.route('/api/users/<int:user_id>/friends', methods=['GET'])
+@require_auth
 def get_user_friends(user_id):
     """Get all accepted friends of a user"""
     try:
@@ -1029,6 +1241,7 @@ def get_user_friends(user_id):
         }), 500
 
 @app.route('/api/users/<int:user_id>/friend-requests', methods=['GET'])
+@require_auth
 def get_friend_requests(user_id):
     """Get pending friend requests for a user"""
     try:
@@ -1062,6 +1275,7 @@ def get_friend_requests(user_id):
         }), 500
 
 @app.route('/api/friendships', methods=['GET'])
+@require_auth
 def get_all_friendships():
     """Get all friendships in the system (admin endpoint)"""
     try:
@@ -1086,6 +1300,7 @@ def get_all_friendships():
         }), 500
 
 @app.route('/api/users/<int:user_id>/friendships', methods=['GET'])
+@require_auth
 def get_user_friendships(user_id):
     """Get all friendships for a specific user (both sent and received)"""
     try:
@@ -1120,6 +1335,7 @@ def get_user_friendships(user_id):
         }), 500
 
 @app.route('/api/users/<int:user_id>/friends', methods=['POST'])
+@require_auth
 def send_friend_request(user_id):
     """Send a friend request"""
     try:
@@ -1178,6 +1394,7 @@ def send_friend_request(user_id):
         }), 500
 
 @app.route('/api/friendships/<int:friendship_id>/accept', methods=['PUT'])
+@require_auth
 def accept_friend_request(friendship_id):
     """Accept a friend request"""
     try:
@@ -1204,6 +1421,7 @@ def accept_friend_request(friendship_id):
         }), 500
 
 @app.route('/api/friendships/<int:friendship_id>/reject', methods=['PUT'])
+@require_auth
 def reject_friend_request(friendship_id):
     """Reject a friend request"""
     try:
@@ -1227,6 +1445,7 @@ def reject_friend_request(friendship_id):
         }), 500
 
 @app.route('/api/users/<int:user_id>/friends/<int:friend_id>', methods=['DELETE'])
+@require_auth
 def remove_friend(user_id, friend_id):
     """Remove a friend (delete friendship)"""
     try:
@@ -1276,6 +1495,7 @@ def remove_friend(user_id, friend_id):
         }), 500
 
 @app.route('/api/users/<int:user_id>/friends/check/<int:friend_id>', methods=['GET'])
+@require_auth
 def check_friendship(user_id, friend_id):
     """Check friendship status between two users"""
     try:
@@ -1422,11 +1642,54 @@ def firebase_status():
             'error': str(e)
         }), 500
 
+@app.route('/api/me', methods=['GET'])
+@require_auth
+def get_current_user():
+    """Get current authenticated user information"""
+    try:
+        # request.user contains the authenticated user info from the token
+        return jsonify({
+            'message': 'Current user information',
+            'user': request.user
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'error': 'Failed to get user information',
+            'details': str(e)
+        }), 500
 
-@app.route('/static/uploads/<filename>')
-def uploaded_file(filename):
-    """Serve uploaded files"""
-    return send_from_directory(UPLOAD_FOLDER, filename)
+@app.route("/upload", methods=["POST"])
+def upload():
+    """Upload file to S3"""
+    try:
+        file = request.files["file"]
+
+        # Extract safe extension (e.g. ".jpg")
+        _, ext = os.path.splitext(secure_filename(file.filename))
+
+        # Generate unique filename with UUID
+        unique_filename = f"{uuid.uuid4()}{ext}"
+
+        # Upload to S3
+        s3.upload_fileobj(
+            file,
+            S3_BUCKET,
+            unique_filename,
+            ExtraArgs={"ContentType": file.content_type}
+        )
+
+        # Public URL of the file
+        url = f"https://{S3_BUCKET}.s3.amazonaws.com/{unique_filename}"
+        return {"url": url}
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to upload file to S3',
+            'error': str(e)
+        }), 500
+
+
+
 
 
 if __name__ == "__main__":
