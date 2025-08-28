@@ -231,12 +231,13 @@ class Opportunity(db.Model):
     description = db.Column(db.String, nullable=True)
     date = db.Column(DateTime, nullable=False)
     duration = db.Column(db.Integer, nullable=False)
-    cause = db.Column(db.String, nullable=False)
-    address = db.Column(db.String, nullable=True)
+    cause = db.Column(db.String, nullable=True)
+    address = db.Column(db.String, nullable=False)
     nonprofit = db.Column(db.String, nullable=True)
     total_slots = db.Column(db.Integer, nullable=True)
     image = db.Column(db.String, nullable=True)
     approved = db.Column(db.Boolean, default=False, nullable=False)
+    host_org_name = db.Column(db.String, nullable=True)
 
     host_org_id = db.Column(db.Integer, db.ForeignKey("organization.id"))
     host_org = db.relationship("Organization", back_populates="opportunities_hosted")
@@ -261,6 +262,7 @@ class Opportunity(db.Model):
         self.host_org_id = kwargs.get("host_org_id")
         self.host_user_id = kwargs.get("host_user_id")
         self.approved = kwargs.get("approved", False)
+        self.host_org_name = kwargs.get("host_org_name")
 
     def serialize(self):
         return {
@@ -276,11 +278,13 @@ class Opportunity(db.Model):
             "image": self.image,
             "host_org_id": self.host_org_id,
             "host_user_id": self.host_user_id,
+            "host_org_name": self.host_org_name,
             "approved": self.approved,
             "involved_users": [
                 {
                     "user": uo.user.name,
                     "id": uo.user.id,
+                    "email": uo.user.email,
                     "phone": uo.user.phone,
                     "registered": uo.registered,
                     "attended": uo.attended,
