@@ -30,8 +30,8 @@ try:
     AWS_DEFAULT_REGION = os.environ.get("AWS_DEFAULT_REGION")
     
     if all([S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION]):
-        s3 = boto3.client(
-            "s3",
+s3 = boto3.client(
+    "s3",
             aws_access_key_id=AWS_ACCESS_KEY_ID,
             aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
             region_name=AWS_DEFAULT_REGION
@@ -1386,7 +1386,7 @@ def send_friend_request(user_id):
         
         if existing_friendship:
             if existing_friendship.accepted:
-                return jsonify({'message': 'Already friends'}), 200
+            return jsonify({'message': 'Already friends'}), 200
             else:
                 return jsonify({'message': 'Friend request already sent'}), 200
         
@@ -1535,7 +1535,7 @@ def check_friendship(user_id, friend_id):
         ).first()
         
         if not friendship:
-            return jsonify({
+        return jsonify({
                 'status': 'no_friendship',
                 'are_friends': False,
                 'user_id': user_id,
@@ -1562,9 +1562,9 @@ def check_friendship(user_id, friend_id):
                 return jsonify({
                     'status': 'request_received',
                     'are_friends': False,
-                    'user_id': user_id,
-                    'friend_id': friend_id
-                })
+            'user_id': user_id,
+            'friend_id': friend_id
+        })
     
     except Exception as e:
         return jsonify({
