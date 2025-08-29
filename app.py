@@ -46,7 +46,7 @@ except Exception as e:
     print("S3 functionality will be disabled.")
 
 # restrict API access to requests from secure origin
-CORS(app, origins=["https://campuscares.net", "https://www.campuscares.net"])
+CORS(app, origins=["https://campuscares.net", "https://www.campuscares.net", "https://cu-cares-frontend.vercel.app"])
 
 # Initialize Firebase Admin SDK
 try:
