@@ -30,8 +30,8 @@ try:
     AWS_DEFAULT_REGION = os.environ.get("AWS_DEFAULT_REGION")
     
     if all([S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION]):
-s3 = boto3.client(
-    "s3",
+        s3 = boto3.client(
+            "s3",
             aws_access_key_id=AWS_ACCESS_KEY_ID,
             aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
             region_name=AWS_DEFAULT_REGION
@@ -85,12 +85,7 @@ except Exception as e:
     print("Firebase authentication endpoints will not work")
 
 # setup config
-database_url = os.environ.get('DATABASE_URL', f"sqlite:///{db_filename}")
-if database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql://", 1)
-# For psycopg3, ensure we're using the correct driver
-if "postgresql://" in database_url and "psycopg" not in database_url:
-    database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+database_url = os.environ.get('DATABASE_URL')
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ECHO"] = os.environ.get('FLASK_ENV') == 'development'
@@ -98,7 +93,6 @@ app.config["SQLALCHEMY_ECHO"] = os.environ.get('FLASK_ENV') == 'development'
 # initialize app
 db.init_app(app)
 with app.app_context():
-    # db.drop_all()
     db.create_all()
 
     # # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
@@ -1386,7 +1380,7 @@ def send_friend_request(user_id):
         
         if existing_friendship:
             if existing_friendship.accepted:
-            return jsonify({'message': 'Already friends'}), 200
+                return jsonify({'message': 'Already friends'}), 200
             else:
                 return jsonify({'message': 'Friend request already sent'}), 200
         
@@ -1535,7 +1529,7 @@ def check_friendship(user_id, friend_id):
         ).first()
         
         if not friendship:
-        return jsonify({
+            return jsonify({
                 'status': 'no_friendship',
                 'are_friends': False,
                 'user_id': user_id,
