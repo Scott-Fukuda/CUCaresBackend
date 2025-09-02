@@ -46,7 +46,7 @@ except Exception as e:
     print("S3 functionality will be disabled.")
 
 # restrict API access to requests from secure origin
-CORS(app, origins=["https://campuscares.net", "https://www.campuscares.net"])
+CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us"])
 
 # Initialize Firebase Admin SDK
 try:
@@ -85,7 +85,12 @@ except Exception as e:
     print("Firebase authentication endpoints will not work")
 
 # setup config
-database_url = os.environ.get('DATABASE_URL')
+database_url = os.environ.get('DATABASE_URL', f"sqlite:///{db_filename}")
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+# For psycopg3, ensure we're using the correct driver
+if "postgresql://" in database_url and "psycopg" not in database_url:
+    database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ECHO"] = os.environ.get('FLASK_ENV') == 'development'
@@ -563,6 +568,32 @@ def get_users():
         
         return jsonify({
             'users': [{"id": user.id, "name": user.name} for user in paginated_users.items],
+            'pagination': {
+                'page': paginated_users.page,
+                'per_page': paginated_users.per_page,
+                'total': paginated_users.total
+            }
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch users',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/users/secure', methods=['GET'])
+@require_auth
+def get_users_secure():
+    """Get all users with full details - requires authentication"""
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 20))
+        
+        users = User.query.order_by(User.id.desc())
+        paginated_users = paginate(users, page, per_page)
+        
+        return jsonify({
+            'users': [user.serialize() for user in paginated_users.items],
             'pagination': {
                 'page': paginated_users.page,
                 'per_page': paginated_users.per_page,
