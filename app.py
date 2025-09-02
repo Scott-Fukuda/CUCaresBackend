@@ -1597,6 +1597,70 @@ def check_friendship(user_id, friend_id):
             'error': str(e)
         }), 500
 
+@app.route('/api/users/<int:user_id>/friendships/all', methods=['GET'])
+@require_auth
+def get_all_user_friendships(user_id):
+    """Get friendship relationship status between user A and all other users"""
+    try:
+        # Check if user exists
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({
+                'message': 'User not found',
+                'error': f'User with ID {user_id} does not exist'
+            }), 404
+        
+        # Get all users except the current user
+        all_users = User.query.filter(User.id != user_id).all()
+        
+        # Get all friendships involving the current user
+        user_friendships = Friendship.query.filter(
+            (Friendship.requester_id == user_id) | (Friendship.receiver_id == user_id)
+        ).all()
+        
+        # Create a map of user_id -> friendship for quick lookup
+        friendship_map = {}
+        for friendship in user_friendships:
+            if friendship.requester_id == user_id:
+                # User A is requester to user B
+                other_user_id = friendship.receiver_id
+                if friendship.accepted:
+                    friendship_map[other_user_id] = "friends"
+                else:
+                    friendship_map[other_user_id] = "sent"
+            else:
+                # User B is requester to user A
+                other_user_id = friendship.requester_id
+                if friendship.accepted:
+                    friendship_map[other_user_id] = "friends"
+                else:
+                    friendship_map[other_user_id] = "received"
+        
+        # Build response with all users and their friendship status
+        users_with_friendship_status = []
+        for other_user in all_users:
+            friendship_status = friendship_map.get(other_user.id, "add")
+            
+            users_with_friendship_status.append({
+                'user_id': other_user.id,
+                'name': other_user.name,
+                'profile_image': other_user.profile_image,
+                'email': other_user.email,
+                'friendship_status': friendship_status
+            })
+        
+        return jsonify({
+            'current_user_id': user_id,
+            'users': users_with_friendship_status,
+            'total_users': len(users_with_friendship_status)
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch user friendships',
+            'error': str(e)
+        }), 500
+
 
 @app.route('/api/protected', methods=['POST'])
 def protected_endpoint():
