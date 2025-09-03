@@ -441,6 +441,7 @@ def create_user():
             email = request.form.get('email')
             phone = request.form.get('phone')
             points = request.form.get('points', 0)
+            car_seats = request.form.get('car_seats', 0)
             interests = request.form.get('interests', '[]')  # Default to empty JSON array string
             
             # Validate required fields
