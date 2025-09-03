@@ -60,6 +60,7 @@ class User(db.Model):
     academic_level = db.Column(db.String, nullable=True)
     major = db.Column(db.String, nullable=True)
     birthday = db.Column(DateTime, nullable=True)
+    car_seats = db.Column(db.Integer, nullable=False, default=0)
     registration_date = db.Column(DateTime, nullable=False, default=datetime.datetime.utcnow) 
 
     organizations = db.relationship(
@@ -104,6 +105,7 @@ class User(db.Model):
         self.academic_level = kwargs.get("academic_level")
         self.major = kwargs.get("major")
         self.birthday = kwargs.get("birthday")
+        self.car_seats = kwargs.get("car_seats", 0)
         self.registration_date = kwargs.get("registration_date", datetime.datetime.utcnow())
 
     def serialize(self):
@@ -121,6 +123,7 @@ class User(db.Model):
             "academic_level": self.academic_level,
             "major": self.major,
             "birthday": self.birthday,
+            "car_seats": self.car_seats,
             "registration_date": self.registration_date,
             "organizations": [l.serialize() for l in self.organizations],
             "opportunities_hosted": [{"name": l.name} for l in self.opportunities_hosted], 
@@ -238,6 +241,8 @@ class Opportunity(db.Model):
     image = db.Column(db.String, nullable=True)
     approved = db.Column(db.Boolean, default=False, nullable=False)
     host_org_name = db.Column(db.String, nullable=True)
+    comments = db.Column(db.JSON, nullable=True, default=list)
+    qualifications = db.Column(db.JSON, nullable=True, default=list)
 
     host_org_id = db.Column(db.Integer, db.ForeignKey("organization.id"))
     host_org = db.relationship("Organization", back_populates="opportunities_hosted")
@@ -263,6 +268,8 @@ class Opportunity(db.Model):
         self.host_user_id = kwargs.get("host_user_id")
         self.approved = kwargs.get("approved", False)
         self.host_org_name = kwargs.get("host_org_name")
+        self.comments = kwargs.get("comments", [])
+        self.qualifications = kwargs.get("qualifications", [])
 
     def serialize(self):
         return {
@@ -280,6 +287,8 @@ class Opportunity(db.Model):
             "host_user_id": self.host_user_id,
             "host_org_name": self.host_org_name,
             "approved": self.approved,
+            "comments": self.comments or [],
+            "qualifications": self.qualifications or [],
             "involved_users": [
                 {
                     "user": uo.user.name,
