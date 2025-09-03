@@ -902,7 +902,7 @@ def create_opportunity():
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name']:
+            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name', 'comments', 'qualifications', 'recurring']:
                 if field in request.form:
                     data[field] = request.form[field]
             
@@ -955,7 +955,10 @@ def create_opportunity():
             image=data.get('image'),
             host_org_id=data['host_org_id'],
             host_user_id=data['host_user_id'],
-            host_org_name=data['host_org_name']
+            host_org_name=data['host_org_name'],
+            comments=data.get('comments', []),
+            qualifications=data.get('qualifications', []),
+            recurring=data.get('recurring', 'once')
         )
         
         db.session.add(new_opportunity)
@@ -1126,7 +1129,7 @@ def update_opportunity(opp_id):
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id', 'host_org_name']:
+            for field in ['name', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'qualifications', 'recurring']:
                 if field in request.form:
                     data[field] = request.form[field]
             
@@ -1142,7 +1145,7 @@ def update_opportunity(opp_id):
         
         # Only update fields that exist in the model
         valid_fields = ['name', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'image',
-                       'host_org_id', 'host_user_id', 'host_org_name']       
+                       'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'qualifications', 'recurring']       
         
         for field in valid_fields:
             if field in data:
