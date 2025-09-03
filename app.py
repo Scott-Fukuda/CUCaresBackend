@@ -632,7 +632,7 @@ def update_user(user_id):
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'email', 'phone', 'points', 'admin', 'gender', 'graduation_year', 'academic_level', 'major', 'birthday']:
+            for field in ['name', 'car_seats', 'email', 'phone', 'points', 'admin', 'gender', 'graduation_year', 'academic_level', 'major', 'birthday']:
                 if field in request.form:
                     data[field] = request.form[field]
             
