@@ -100,7 +100,7 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
 
-    # # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
+    # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
     # User.__table__.drop(db.engine)
     # Opportunity.__table__.drop(db.engine)
     # Organization.__table__.drop(db.engine)

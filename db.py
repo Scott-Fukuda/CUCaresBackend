@@ -243,6 +243,7 @@ class Opportunity(db.Model):
     host_org_name = db.Column(db.String, nullable=True)
     comments = db.Column(db.JSON, nullable=True, default=list)
     qualifications = db.Column(db.JSON, nullable=True, default=list)
+    recurring = db.Column(db.String, nullable=False, default="once")
 
     host_org_id = db.Column(db.Integer, db.ForeignKey("organization.id"))
     host_org = db.relationship("Organization", back_populates="opportunities_hosted")
@@ -270,6 +271,7 @@ class Opportunity(db.Model):
         self.host_org_name = kwargs.get("host_org_name")
         self.comments = kwargs.get("comments", [])
         self.qualifications = kwargs.get("qualifications", [])
+        self.recurring = kwargs.get("recurring", "once")
 
     def serialize(self):
         return {
@@ -289,6 +291,7 @@ class Opportunity(db.Model):
             "approved": self.approved,
             "comments": self.comments or [],
             "qualifications": self.qualifications or [],
+            "recurring": self.recurring,
             "involved_users": [
                 {
                     "user": uo.user.name,
