@@ -1618,8 +1618,9 @@ def get_all_user_friendships(user_id):
             (Friendship.requester_id == user_id) | (Friendship.receiver_id == user_id)
         ).all()
         
-        # Create a map of user_id -> friendship for quick lookup
+        # Create maps for friendship status and friendship ID
         friendship_map = {}
+        friendship_id_map = {}
         for friendship in user_friendships:
             if friendship.requester_id == user_id:
                 # User A is requester to user B
@@ -1628,6 +1629,7 @@ def get_all_user_friendships(user_id):
                     friendship_map[other_user_id] = "friends"
                 else:
                     friendship_map[other_user_id] = "sent"
+                friendship_id_map[other_user_id] = friendship.id
             else:
                 # User B is requester to user A
                 other_user_id = friendship.requester_id
@@ -1635,18 +1637,21 @@ def get_all_user_friendships(user_id):
                     friendship_map[other_user_id] = "friends"
                 else:
                     friendship_map[other_user_id] = "received"
+                friendship_id_map[other_user_id] = friendship.id
         
         # Build response with all users and their friendship status
         users_with_friendship_status = []
         for other_user in all_users:
             friendship_status = friendship_map.get(other_user.id, "add")
+            friendship_id = friendship_id_map.get(other_user.id, None)
             
             users_with_friendship_status.append({
                 'user_id': other_user.id,
                 'name': other_user.name,
                 'profile_image': other_user.profile_image,
                 'email': other_user.email,
-                'friendship_status': friendship_status
+                'friendship_status': friendship_status,
+                'friendship_id': friendship_id
             })
         
         return jsonify({
