@@ -1135,6 +1135,28 @@ def get_opportunity(opp_id):
             'error': str(e)
         }), 500
 
+@app.route('/api/opp/<int:opp_id>/full', methods=['GET'])
+def check_opportunity_full(opp_id):
+    """Check if opportunity is fully booked"""
+    try:
+        opportunity = Opportunity.query.get_or_404(opp_id)
+        
+        # Count the number of users involved in this opportunity
+        involved_users_count = UserOpportunity.query.filter_by(opportunity_id=opp_id).count()
+        
+        # Check if fully booked
+        is_full = involved_users_count >= opportunity.total_slots
+        
+        return jsonify({
+            'is_full': is_full
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to check opportunity status',
+            'error': str(e)
+        }), 500
+
 @app.route('/api/opps/<int:opp_id>', methods=['PUT'])
 @require_auth
 def update_opportunity(opp_id):
