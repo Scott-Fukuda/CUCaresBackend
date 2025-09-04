@@ -1135,7 +1135,7 @@ def get_opportunity(opp_id):
             'error': str(e)
         }), 500
 
-@app.route('/api/opp/<int:opp_id>/full', methods=['GET'])
+@app.route('/api/opps/<int:opp_id>/full', methods=['GET'])
 def check_opportunity_full(opp_id):
     """Check if opportunity is fully booked"""
     try:
