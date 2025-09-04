@@ -944,14 +944,19 @@ def create_opportunity():
         if not data.get('host_org_name'):
             data['host_org_name'] = host_org.name
         
-        # Parse date and add 4 hours for GMT conversion
+        # Parse date assuming it's in EDT (Eastern Daylight Time)
+        from datetime import timezone, timedelta
+        edt_offset = timedelta(hours=-4)  # EDT is UTC-4
+        edt_tz = timezone(edt_offset)
+        
         parsed_date = datetime.strptime(data['date'], '%Y-%m-%dT%H:%M:%S')
+        parsed_date = parsed_date.replace(tzinfo=edt_tz)
         
         # Create new opportunity
         new_opportunity = Opportunity(
             name=data['name'],
             description=data.get('description'),
-            date=parsed_date, # GMT time (4 hours added)
+            date=parsed_date, 
             duration=data['duration'],
             causes=data.get('causes'),
             address=data.get('address'),
@@ -1155,7 +1160,13 @@ def update_opportunity(opp_id):
         for field in valid_fields:
             if field in data:
                 if(field == 'date'):
-                    new_date = datetime.strptime(data['date'], '%Y-%m-%dT%H:%M:%S') # converts to datetime object
+                    # Parse date assuming it's in EDT (Eastern Daylight Time)
+                    from datetime import timezone, timedelta
+                    edt_offset = timedelta(hours=-4)  # EDT is UTC-4
+                    edt_tz = timezone(edt_offset)
+                    
+                    new_date = datetime.strptime(data['date'], '%Y-%m-%dT%H:%M:%S')
+                    new_date = new_date.replace(tzinfo=edt_tz)
                     setattr(opp, field, new_date)
                 elif(field == 'host_org_id'): # if host org changes, update this in other models
                     new_host_org_id = data['host_org_id']
