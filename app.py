@@ -476,7 +476,8 @@ def create_user():
                 'graduation_year': request.form.get('graduation_year'),
                 'academic_level': request.form.get('academic_level'),
                 'major': request.form.get('major'),
-                'birthday': request.form.get('birthday')
+                'birthday': request.form.get('birthday'),
+                'car_seats': car_seats
             }
         else:
             # Handle JSON data
@@ -558,33 +559,8 @@ def create_user():
         }), 500
 
 @app.route('/api/users', methods=['GET'])
-def get_users():
-    """Get all users with pagination"""
-    try:
-        page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 20))
-        
-        users = User.query.order_by(User.id.desc())
-        paginated_users = paginate(users, page, per_page)
-        
-        return jsonify({
-            'users': [{"id": user.id, "name": user.name} for user in paginated_users.items],
-            'pagination': {
-                'page': paginated_users.page,
-                'per_page': paginated_users.per_page,
-                'total': paginated_users.total
-            }
-        })
-    
-    except Exception as e:
-        return jsonify({
-            'message': 'Failed to fetch users',
-            'error': str(e)
-        }), 500
-
-@app.route('/api/users/secure', methods=['GET'])
 @require_auth
-def get_users_secure():
+def get_users():
     """Get all users with full details - requires authentication"""
     try:
         page = int(request.args.get('page', 1))
@@ -619,6 +595,35 @@ def get_user(user_id):
     except Exception as e:
         return jsonify({
             'message': 'Failed to fetch user',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/users/email/<email>', methods=['GET'])
+def get_user_by_email(email):
+    """Get user by email - Login only: Quick check if user exists with minimal data"""
+    try:
+        user = User.query.filter_by(email=email).first()
+        
+        if not user:
+            return jsonify({
+                'message': 'User not found',
+                'exists': False
+            }), 404
+        
+        # Return minimal user data for authentication
+        return jsonify({
+            'exists': True,
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'name': user.name,
+                'admin': user.admin,
+            }
+        }), 200
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch user by email',
             'error': str(e)
         }), 500
 
