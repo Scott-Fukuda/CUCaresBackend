@@ -908,7 +908,7 @@ def create_opportunity():
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name', 'comments', 'qualifications', 'recurring']:
+            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'cause', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name', 'comments', 'qualifications', 'recurring']:
                 if field in request.form:
                     data[field] = request.form[field]
             
@@ -917,7 +917,7 @@ def create_opportunity():
             data = request.get_json()
         
         # Validate required fields
-        required_fields = ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'duration']
+        required_fields = ['name', 'host_org_id', 'host_user_id', 'date', 'cause', 'duration']
         if not all(field in data for field in required_fields):
             return jsonify({
                 'message': 'Missing required fields',
@@ -966,7 +966,7 @@ def create_opportunity():
             description=data.get('description'),
             date=gmt_date, 
             duration=data['duration'],
-            causes=data.get('causes'),
+            cause=data.get('cause'),
             address=data.get('address'),
             nonprofit=data.get('nonprofit'),
             total_slots=data.get('total_slots'),
@@ -1169,7 +1169,7 @@ def update_opportunity(opp_id):
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'qualifications', 'recurring']:
+            for field in ['name', 'cause', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'qualifications', 'recurring']:
                 if field in request.form:
                     data[field] = request.form[field]
                 if field == 'date':
