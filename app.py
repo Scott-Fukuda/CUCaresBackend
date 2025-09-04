@@ -4,7 +4,7 @@ import uuid
 from flask import Flask, request, jsonify, send_from_directory
 from db import db, User, Organization, Opportunity, UserOpportunity, Friendship
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import firebase_admin
@@ -1160,6 +1160,7 @@ def update_opportunity(opp_id):
             if field in data:
                 if(field == 'date'):
                     new_date = datetime.strptime(data['date'], '%Y-%m-%dT%H:%M:%S') # converts to datetime object
+                    new_date = new_date.replace(tzinfo=timezone(timedelta(hours=-4)))
                     setattr(opp, field, new_date)
                 elif(field == 'host_org_id'): # if host org changes, update this in other models
                     new_host_org_id = data['host_org_id']
