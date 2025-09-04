@@ -945,12 +945,13 @@ def create_opportunity():
             data['host_org_name'] = host_org.name
         
         # Parse date and add 4 hours for GMT conversion
+        parsed_date = datetime.strptime(data['date'], '%Y-%m-%dT%H:%M:%S')
         
         # Create new opportunity
         new_opportunity = Opportunity(
             name=data['name'],
             description=data.get('description'),
-            date=data['date'],
+            date=parsed_date, # GMT time (4 hours added)
             duration=data['duration'],
             causes=data.get('causes'),
             address=data.get('address'),
