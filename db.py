@@ -74,7 +74,8 @@ class User(db.Model):
 
     opportunities_hosted = db.relationship(
         "Opportunity", 
-        back_populates="host_user"
+        back_populates="host_user",
+        cascade="all, delete-orphan"
     )
 
     # Friendship relationships
