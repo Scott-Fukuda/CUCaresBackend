@@ -944,7 +944,20 @@ def create_opportunity():
         if not data.get('host_org_name'):
             data['host_org_name'] = host_org.name
         
-        parsed_date = datetime.strptime(data['date'], '%Y-%m-%dT%H:%M:%S')
+        # Parse date with flexible format support
+        date_string = data['date'].strip()
+        try:
+            # Try with seconds first
+            parsed_date = datetime.strptime(date_string, '%Y-%m-%dT%H:%M:%S')
+        except ValueError:
+            try:
+                # Try without seconds
+                parsed_date = datetime.strptime(date_string, '%Y-%m-%dT%H:%M')
+            except ValueError:
+                return jsonify({
+                    'message': 'Invalid date format. Use YYYY-MM-DDTHH:MM:SS or YYYY-MM-DDTHH:MM'
+                }), 400
+        
         gmt_date = parsed_date + timedelta(hours=4)
 
         # Create new opportunity
@@ -1159,7 +1172,19 @@ def update_opportunity(opp_id):
         for field in valid_fields:
             if field in data:
                 if(field == 'date'):
-                    new_date = datetime.strptime(data['date'], '%Y-%m-%dT%H:%M:%S') # converts to datetime object
+                    # Parse date with flexible format support
+                    date_string = data['date'].strip()
+                    try:
+                        # Try with seconds first
+                        new_date = datetime.strptime(date_string, '%Y-%m-%dT%H:%M:%S')
+                    except ValueError:
+                        try:
+                            # Try without seconds
+                            new_date = datetime.strptime(date_string, '%Y-%m-%dT%H:%M')
+                        except ValueError:
+                            return jsonify({
+                                'message': 'Invalid date format. Use YYYY-MM-DDTHH:MM:SS or YYYY-MM-DDTHH:MM'
+                            }), 400
                     new_date = new_date.replace(tzinfo=timezone(timedelta(hours=-4)))
                     setattr(opp, field, new_date)
                 elif(field == 'host_org_id'): # if host org changes, update this in other models
