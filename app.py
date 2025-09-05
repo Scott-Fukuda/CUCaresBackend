@@ -1188,7 +1188,7 @@ def update_opportunity(opp_id):
             data = request.get_json()
         
         # Only update fields that exist in the model
-        valid_fields = ['name', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'image',
+        valid_fields = ['name', 'duration', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'image',
                        'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'qualifications', 'recurring']       
         
         for field in valid_fields:
