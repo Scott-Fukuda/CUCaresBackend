@@ -564,7 +564,7 @@ def get_users():
     """Get all users with full details - requires authentication"""
     try:
         page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 20))
+        per_page = int(request.args.get('per_page', 10000))
         
         users = User.query.order_by(User.id.desc())
         paginated_users = paginate(users, page, per_page)
@@ -768,7 +768,7 @@ def get_organizations():
     """Get all organizations with pagination"""
     try:
         page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 20))
+        per_page = int(request.args.get('per_page', 10000))
         
         organizations = Organization.query.order_by(Organization.id.desc())
         paginated_orgs = paginate(organizations, page, per_page)
@@ -794,7 +794,7 @@ def get_approved_organizations():
     """Get all approved organizations with pagination"""
     try:
         page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 20))
+        per_page = int(request.args.get('per_page', 10000))
         
         organizations = Organization.query.filter_by(approved=True).order_by(Organization.id.desc())
         paginated_orgs = paginate(organizations, page, per_page)
@@ -821,7 +821,7 @@ def get_unapproved_organizations():
     """Get all unapproved organizations with pagination"""
     try:
         page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 20))
+        per_page = int(request.args.get('per_page', 10000))
         
         organizations = Organization.query.filter_by(approved=False).order_by(Organization.id.desc())
         paginated_orgs = paginate(organizations, page, per_page)
@@ -1007,7 +1007,7 @@ def get_opportunities():
     """Get all opportunities with pagination"""
     try:
         page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 20))
+        per_page = int(request.args.get('per_page', 10000))
         
         opportunities = Opportunity.query.order_by(Opportunity.id.desc())
         paginated_opps = paginate(opportunities, page, per_page)
@@ -1097,7 +1097,7 @@ def get_unapproved_opportunities():
     """Get unapproved opportunities with pagination"""
     try:
         page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 20))
+        per_page = int(request.args.get('per_page', 10000))
         
         # Filter opportunities where approved is False
         unapproved_opportunities = Opportunity.query.filter(
