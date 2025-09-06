@@ -301,8 +301,8 @@ class Opportunity(db.Model):
                     "phone": uo.user.phone,
                     "registered": uo.registered,
                     "attended": uo.attended,
+                    "profile_image": uo.user.profile_image,
                 }
                 for uo in self.user_opportunities
             ],
-
         }
