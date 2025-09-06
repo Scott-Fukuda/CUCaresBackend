@@ -1033,7 +1033,7 @@ def get_current_opportunities():
     """Get current opportunities (whose start dates haven't passed) with pagination"""
     try:
         page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 20))
+        per_page = int(request.args.get('per_page', 10000))
         
         # Get current datetime
         current_datetime = datetime.utcnow()
@@ -1067,7 +1067,7 @@ def get_approved_opportunities():
     """Get approved opportunities with pagination"""
     try:
         page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 20))
+        per_page = int(request.args.get('per_page', 10000))
         
         # Filter opportunities where approved is True
         approved_opportunities = Opportunity.query.filter(
