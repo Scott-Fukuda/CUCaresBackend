@@ -1121,6 +1121,20 @@ def get_unapproved_opportunities():
             'error': str(e)
         }), 500
 
+@app.route('/api/opps/<int:opp_id>/phone', methods=['GET'])
+@require_auth
+def get_involved_users_phone_numbers(opp_id):
+    """Get the phone numbers of all users involved in an opportunity"""
+    try:
+        involved_users = UserOpportunity.query.filter_by(opportunity_id=opp_id).all()
+        return jsonify([user.phone for user in involved_users])
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch involved users phone numbers',
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/opps/<int:opp_id>', methods=['GET'])
 @require_auth
 def get_opportunity(opp_id):
