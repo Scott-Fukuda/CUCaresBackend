@@ -11,6 +11,7 @@ class UserOpportunity(db.Model):
     opportunity_id = db.Column(db.Integer, db.ForeignKey('opportunity.id'), primary_key=True)
     registered = db.Column(db.Boolean, default=False)
     attended = db.Column(db.Boolean, default=False)
+    driving = db.Column(db.Boolean, default=False)
 
     user = db.relationship("User", back_populates="user_opportunities")
     opportunity = db.relationship("Opportunity", back_populates="user_opportunities")
@@ -133,6 +134,7 @@ class User(db.Model):
                     "name": uo.opportunity.name,
                     "registered": uo.registered,
                     "attended": uo.attended,
+                    "driving": uo.driving,
                 } for uo in self.user_opportunities
             ],
             "friends": [
@@ -301,6 +303,7 @@ class Opportunity(db.Model):
                     "phone": uo.user.phone,
                     "registered": uo.registered,
                     "attended": uo.attended,
+                    "driving": uo.driving,
                     "profile_image": uo.user.profile_image,
                 }
                 for uo in self.user_opportunities
