@@ -1126,7 +1126,7 @@ def get_unapproved_opportunities():
 def get_involved_users_phone_numbers(opp_id):
     """Get the phone numbers of all users involved in an opportunity"""
     try:
-        opp = UserOpportunity.query.filter_by(opportunity_id=opp_id).all()
+        opp = UserOpportunity.query.filter_by(opportunity_id=opp_id).first()
         return jsonify([user.phone for user in opp.involved_users])
     except Exception as e:
         return jsonify({
