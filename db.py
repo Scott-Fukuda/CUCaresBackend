@@ -247,6 +247,8 @@ class Opportunity(db.Model):
     comments = db.Column(db.JSON, nullable=True, default=list)
     qualifications = db.Column(db.JSON, nullable=True, default=list)
     recurring = db.Column(db.String, nullable=False, default="once")
+    visibility = db.Column(db.JSON, nullable=True, default=list)
+    attendance_marked = db.Column(db.Boolean, default=False)
 
     host_org_id = db.Column(db.Integer, db.ForeignKey("organization.id"))
     host_org = db.relationship("Organization", back_populates="opportunities_hosted")
@@ -275,6 +277,8 @@ class Opportunity(db.Model):
         self.comments = kwargs.get("comments", [])
         self.qualifications = kwargs.get("qualifications", [])
         self.recurring = kwargs.get("recurring", "once")
+        self.visibility = kwargs.get("visibility", [])
+        self.attendance_marked = kwargs.get("attendance_marked", False)
 
     def serialize(self):
         return {
@@ -295,6 +299,8 @@ class Opportunity(db.Model):
             "comments": self.comments or [],
             "qualifications": self.qualifications or [],
             "recurring": self.recurring,
+            "visibility": self.visibility or [],
+            "attendance_marked": self.attendance_marked,
             "involved_users": [
                 {
                     "user": uo.user.name,
