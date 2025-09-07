@@ -403,6 +403,7 @@ def marked_as_attended():
             existing = UserOpportunity.query.filter_by(user_id=user_id, opportunity_id=opportunity_id).first()
             
             if existing:
+                opp.attendance_marked = True
                 if not existing.attended:
                     existing.attended = True
                     existing.driving = driving  # Update driving status
@@ -420,6 +421,7 @@ def marked_as_attended():
                 attended=True,
                 driving=driving
             )
+            opp.attendance_marked = True
             db.session.add(user_opportunity)
             user.points += duration
             db.session.commit()
