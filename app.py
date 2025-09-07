@@ -379,42 +379,45 @@ def unregister_user_from_organization():
 @require_auth
 def marked_as_attended():
     data = request.get_json()
-    user_id = data.get('user_id')
+    user_ids = data.get('user_ids')
     opportunity_id = data.get('opportunity_id')
+    duration = data.get('duration')
 
-    if not user_id or not opportunity_id:
-        return jsonify({"error": "user_id and opportunity_id are required"}), 400
+    for user_id in user_ids:
+        if not user_id or not opportunity_id:
+            return jsonify({"error": "user_id and opportunity_id are required"}), 400
 
-    try:
-        user = User.query.get(user_id)
-        opp = Opportunity.query.get(opportunity_id)
+    try:    
+        for user_id in user_ids:
+            user = User.query.get(user_id)
+            opp = Opportunity.query.get(opportunity_id)
 
-        if not user or not opp:
-            return jsonify({"error": "Invalid user_id or opportunity_id"}), 404
+            if not user or not opp:
+                return jsonify({"error": "Invalid user_id or opportunity_id"}), 404
 
-        opp_dur = getattr(opp, 'duration', 0) or 0  # fallback if duration is None
+            opp_dur = getattr(opp, 'duration', 0) or 0  # fallback if duration is None
 
-        existing = UserOpportunity.query.filter_by(user_id=user_id, opportunity_id=opportunity_id).first()
-        
-        if existing:
-            if not existing.attended:
-                existing.attended = True
-                user.points += opp_dur
-                db.session.commit()
-                return jsonify({"message": "Attendance updated & points awarded"}), 200
-            else:
-                return jsonify({"message": "User already marked as attended"}), 200
+            existing = UserOpportunity.query.filter_by(user_id=user_id, opportunity_id=opportunity_id).first()
+            
+            if existing:
+                if not existing.attended:
+                    existing.attended = True
+                    user.points += opp_dur
+                    db.session.commit()
+                    return jsonify({"message": "Attendance updated & points awarded"}), 200
+                else:
+                    return jsonify({"message": "User already marked as attended"}), 200
 
-        # If not already registered, create new entry and mark as attended
-        user_opportunity = UserOpportunity(
-            user_id=user_id,
-            opportunity_id=opportunity_id,
-            registered=False,
-            attended=True
-        )
-        db.session.add(user_opportunity)
-        user.points += opp_dur
-        db.session.commit()
+            # If not already registered, create new entry and mark as attended
+            user_opportunity = UserOpportunity(
+                user_id=user_id,
+                opportunity_id=opportunity_id,
+                registered=False,
+                attended=True
+            )
+            db.session.add(user_opportunity)
+            user.points += duration
+            db.session.commit()
         return jsonify({"message": "Marked as attended and registered, points awarded"}), 201
 
     except Exception as e:
