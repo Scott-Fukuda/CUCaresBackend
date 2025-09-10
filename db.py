@@ -23,6 +23,24 @@ user_organization = db.Table(
     db.Column("organization_id", db.Integer, db.ForeignKey("organization.id"), primary_key=True)
 )
 
+class ApprovedEmail(db.Model):
+    __tablename__ = "approved_emails"
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    email = db.Column(db.String, nullable=False, unique=True)
+    added_date = db.Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    
+    def __init__(self, **kwargs):
+        self.email = kwargs.get("email")
+        self.added_date = kwargs.get("added_date", datetime.datetime.utcnow())
+    
+    def serialize(self):
+        return {
+            "id": self.id,
+            "email": self.email,
+            "added_date": self.added_date
+        }
+
 # Friendship model
 class Friendship(db.Model):
     __tablename__ = "friendship"

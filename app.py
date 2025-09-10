@@ -2,7 +2,7 @@ import json
 import os
 import uuid
 from flask import Flask, request, jsonify, send_from_directory
-from db import db, User, Organization, Opportunity, UserOpportunity, Friendship
+from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail
 
 from datetime import datetime, timedelta, timezone
 from flask_cors import CORS
@@ -11,6 +11,7 @@ import firebase_admin
 from firebase_admin import auth, credentials, initialize_app
 from dotenv import load_dotenv
 import boto3
+from flask_migrate import Migrate
 
 # define db filename
 db_filename = "cucares.db"
@@ -86,19 +87,22 @@ except Exception as e:
 
 # setup config
 database_url = os.environ.get('DATABASE_URL', f"sqlite:///{db_filename}")
-if database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql://", 1)
-# For psycopg3, ensure we're using the correct driver
-if "postgresql://" in database_url and "psycopg" not in database_url:
-    database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ECHO"] = os.environ.get('FLASK_ENV') == 'development'
-
+from sqlalchemy import create_engine
+engine = create_engine(database_url)
+print("trying")
+print(database_url)
+conn = engine.connect()
+print("Connected!")
 # initialize app
 db.init_app(app)
-with app.app_context():
-    db.create_all()
+migrate = Migrate(app, db)
+
+# with app.app_context():
+    # For app migrations don't create all tables
+    # db.create_all()
 
     # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
     # User.__table__.drop(db.engine)
@@ -1882,8 +1886,123 @@ def upload():
             'error': str(e)
         }), 500
 
+# Approved Email Management Endpoints
 
+@app.route('/api/approved-emails', methods=['POST'])
+@require_auth
+def create_approved_email():
+    """Create a new approved email entry"""
+    try:
+        data = request.get_json()
+        
+        if not data or 'email' not in data:
+            return jsonify({
+                'error': 'Email is required',
+                'message': 'Please provide an email address'
+            }), 400
+        
+        email = data['email'].strip().lower()
+        
+        # Check if email already exists
+        existing_email = ApprovedEmail.query.filter_by(email=email).first()
+        if existing_email:
+            return jsonify({
+                'error': 'Email already approved',
+                'message': f'Email {email} is already in the approved list'
+            }), 409
+        
+        # Create new approved email
+        approved_email = ApprovedEmail(
+            email=email,
+            added_by_admin=data.get('added_by_admin', 'admin')
+        )
+        
+        db.session.add(approved_email)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Email approved successfully',
+            'approved_email': approved_email.serialize()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Failed to create approved email',
+            'message': str(e)
+        }), 500
 
+@app.route('/api/approved-emails/<int:email_id>', methods=['DELETE'])
+@require_auth
+def delete_approved_email(email_id):
+    """Delete an approved email entry"""
+    try:
+        approved_email = ApprovedEmail.query.get(email_id)
+        
+        if not approved_email:
+            return jsonify({
+                'error': 'Approved email not found',
+                'message': f'No approved email found with ID {email_id}'
+            }), 404
+        
+        email_address = approved_email.email
+        db.session.delete(approved_email)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Approved email deleted successfully',
+            'deleted_email': email_address
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Failed to delete approved email',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/approved-emails', methods=['GET'])
+@require_auth
+def get_all_approved_emails():
+    """Get all approved emails"""
+    try:
+        approved_emails = ApprovedEmail.query.order_by(ApprovedEmail.added_date.desc()).all()
+        
+        return jsonify({
+            'message': 'Approved emails retrieved successfully',
+            'approved_emails': [email.serialize() for email in approved_emails],
+            'count': len(approved_emails)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': 'Failed to retrieve approved emails',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/approved-emails/<int:email_id>', methods=['GET'])
+@require_auth
+def get_approved_email_by_id(email_id):
+    """Get a specific approved email by ID"""
+    try:
+        approved_email = ApprovedEmail.query.get(email_id)
+        
+        if not approved_email:
+            return jsonify({
+                'error': 'Approved email not found',
+                'message': f'No approved email found with ID {email_id}'
+            }), 404
+        
+        return jsonify({
+            'message': 'Approved email retrieved successfully',
+            'approved_email': approved_email.serialize()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': 'Failed to retrieve approved email',
+            'message': str(e)
+        }), 500
 
 
 if __name__ == "__main__":

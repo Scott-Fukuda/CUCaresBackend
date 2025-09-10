@@ -10,6 +10,7 @@ firebase_admin==7.1.0
 Flask==2.2.2
 flask-cors==6.0.1
 Flask-SQLAlchemy==3.0.2
+flask-migrate==4.0.5
 google-api-core==2.25.1
 google-auth==2.40.3
 google-cloud-core==2.4.3
