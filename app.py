@@ -1961,46 +1961,35 @@ def delete_approved_email(email_id):
             'message': str(e)
         }), 500
 
-@app.route('/api/approved-emails', methods=['GET'])
-@require_auth
-def get_all_approved_emails():
-    """Get all approved emails"""
+@app.route('/api/approved-emails/check/<email>', methods=['GET'])
+def check_email_approval(email):
+    """Check if an email is approved"""
     try:
-        approved_emails = ApprovedEmail.query.order_by(ApprovedEmail.added_date.desc()).all()
+        # Normalize the email (lowercase, trimmed)
+        normalized_email = email.strip().lower()
+        
+        # Check if email exists in approved list
+        approved_email = ApprovedEmail.query.filter_by(email=normalized_email).first()
+        
+        is_approved = approved_email is not None
+        
+        response_data = {
+            'email': normalized_email,
+            'is_approved': is_approved
+        }
+        
+        # If approved, include additional details
+        if is_approved:
+            response_data['approved_details'] = approved_email.serialize()
         
         return jsonify({
-            'message': 'Approved emails retrieved successfully',
-            'approved_emails': [email.serialize() for email in approved_emails],
-            'count': len(approved_emails)
+            'message': 'Email approval status checked successfully',
+            **response_data
         }), 200
         
     except Exception as e:
         return jsonify({
-            'error': 'Failed to retrieve approved emails',
-            'message': str(e)
-        }), 500
-
-@app.route('/api/approved-emails/<int:email_id>', methods=['GET'])
-@require_auth
-def get_approved_email_by_id(email_id):
-    """Get a specific approved email by ID"""
-    try:
-        approved_email = ApprovedEmail.query.get(email_id)
-        
-        if not approved_email:
-            return jsonify({
-                'error': 'Approved email not found',
-                'message': f'No approved email found with ID {email_id}'
-            }), 404
-        
-        return jsonify({
-            'message': 'Approved email retrieved successfully',
-            'approved_email': approved_email.serialize()
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            'error': 'Failed to retrieve approved email',
+            'error': 'Failed to check email approval',
             'message': str(e)
         }), 500
 
