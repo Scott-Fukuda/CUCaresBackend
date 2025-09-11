@@ -12,6 +12,7 @@ from firebase_admin import auth, credentials, initialize_app
 from dotenv import load_dotenv
 import boto3
 from flask_migrate import Migrate
+import random
 
 # define db filename
 db_filename = "cucares.db"
@@ -47,7 +48,12 @@ except Exception as e:
     print("S3 functionality will be disabled.")
 
 # restrict API access to requests from secure origin
-CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us"])
+# CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us"])
+
+# testing
+CORS(app, origins=["http://localhost:5173/"])
+
+
 
 # Initialize Firebase Admin SDK
 try:
@@ -100,9 +106,9 @@ print("Connected!")
 db.init_app(app)
 migrate = Migrate(app, db)
 
-# with app.app_context():
+with app.app_context():
     # For app migrations don't create all tables
-    # db.create_all()
+    db.create_all()
 
     # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
     # User.__table__.drop(db.engine)
@@ -402,8 +408,6 @@ def marked_as_attended():
             if not user or not opp:
                 return jsonify({"error": "Invalid user_id or opportunity_id"}), 404
 
-            opp_dur = getattr(opp, 'duration', 0) or 0  # fallback if duration is None
-
             existing = UserOpportunity.query.filter_by(user_id=user_id, opportunity_id=opportunity_id).first()
             
             if existing:
@@ -411,7 +415,8 @@ def marked_as_attended():
                 if not existing.attended:
                     existing.attended = True
                     existing.driving = driving  # Update driving status
-                    user.points += opp_dur
+                    user.points += duration
+                    opp.actual_runtime = duration
                     db.session.commit()
                     return jsonify({"message": "Attendance updated & points awarded"}), 200
                 else:
@@ -922,7 +927,7 @@ def create_opportunity():
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'cause', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked']:
+            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'cause', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']:
                 if field in request.form:
                     data[field] = request.form[field]
             
@@ -992,7 +997,9 @@ def create_opportunity():
             qualifications=data.get('qualifications', []),
             recurring=data.get('recurring', 'once'),
             visibility=data.get('visibility', []),
-            attendance_marked=data.get('attendance_marked', False)
+            attendance_marked=data.get('attendance_marked', False),
+            redirect_url=data.get('redirect_url', None),
+            actual_runtime=data.get('actual_runtime', None)
         )
         
         db.session.add(new_opportunity)
@@ -1199,7 +1206,7 @@ def update_opportunity(opp_id):
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'cause', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'duration','qualifications', 'recurring', 'visibility', 'attendance_marked']:
+            for field in ['name', 'cause', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'duration','qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']:
                 if field in request.form:
                     data[field] = request.form[field]
                 if field == 'date':
@@ -1219,7 +1226,7 @@ def update_opportunity(opp_id):
         
         # Only update fields that exist in the model
         valid_fields = ['name', 'duration', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'image',
-                       'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked']       
+                       'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']       
         
         for field in valid_fields:
             if field in data:
@@ -1990,6 +1997,174 @@ def check_email_approval(email):
     except Exception as e:
         return jsonify({
             'error': 'Failed to check email approval',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/generate-schema', methods=['POST'])
+def generate_random_schema():
+    """Generate a random database schema with users, orgs, opportunities, and friend requests"""
+    try:
+        
+        # Sample data for generation
+        first_names = ["Alex", "Jordan", "Taylor", "Casey", "Morgan", "Riley", "Avery", "Quinn", "Sage", "River"]
+        last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez"]
+        universities = ["Harvard", "Stanford", "MIT", "Yale", "Princeton", "Columbia", "Duke", "Northwestern", "Brown", "Dartmouth"]
+        companies = ["Google", "Microsoft", "Apple", "Amazon", "Meta", "Tesla", "Netflix", "Uber", "Airbnb", "Spotify"]
+        
+        org_types = ["Academic", "Professional", "Social", "Service", "Cultural"]
+        causes = ["Education", "Environment", "Healthcare", "Poverty", "Animal Welfare", "Arts", "Sports", "Technology"]
+        locations = ["New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", "San Antonio", "San Diego"]
+        
+        generated_data = {
+            "users": [],
+            "organizations": [],
+            "opportunities": [],
+            "friend_requests": []
+        }
+        
+        # 1. Generate 5 users
+        users = []  # Store users in a list
+        for i in range(5):
+            first_name = random.choice(first_names)
+            last_name = random.choice(last_names)
+            university = random.choice(universities)
+            
+            user = User(
+                name=f"{first_name} {last_name}",
+                email=f"{first_name.lower()}.{last_name.lower()}@{university.lower()}.edu",
+                phone=f"555-{random.randint(100, 999)}-{random.randint(1000, 9999)}",
+                points=random.randint(0, 500),
+                interests=random.sample(causes, random.randint(1, 3)),
+                admin=random.choice([True, False]),
+                gender=random.choice(["Male", "Female", "Non-binary", "Prefer not to say"]),
+                graduation_year=str(random.randint(2024, 2028)),
+                academic_level=random.choice(["Undergraduate", "Graduate", "PhD"]),
+                major=random.choice(["Computer Science", "Business", "Engineering", "Medicine", "Law", "Arts"]),
+                birthday=datetime.now() - timedelta(days=random.randint(6570, 10950)),  # 18-30 years old
+                car_seats=random.randint(0, 7)
+            )
+            
+            db.session.add(user)
+            db.session.flush()  # Get the ID
+            users.append(user)  # Add to our list
+            generated_data["users"].append(user.serialize())
+        
+        # 2. Generate 5 organizations, approve 3
+        organizations = []  # Store orgs in a list
+        for i in range(5):
+            org_type = random.choice(org_types)
+            company = random.choice(companies)
+            
+            org = Organization(
+                name=f"{company} {org_type} Society",
+                description=f"A {org_type.lower()} organization focused on professional development and networking in the {company} ecosystem.",
+                member_count=random.randint(10, 200),
+                points=random.randint(50, 1000),
+                type=org_type,
+                approved=i < 3  # First 3 are approved
+            )
+            
+            db.session.add(org)
+            db.session.flush()  # Get the ID
+            organizations.append(org)  # Add to our list
+            generated_data["organizations"].append(org.serialize())
+        
+        db.session.commit()
+        # 3. Generate 5 opportunities, approve 3
+        for i in range(5):
+            cause = random.choice(causes)
+            location = random.choice(locations)
+            org = organizations[i % 5]  # Use our list instead of querying
+            
+            # Random date between now and 3 months from now
+            start_date = datetime.now() + timedelta(days=random.randint(1, 90))
+            
+            opportunity = Opportunity(
+                name=f"{cause} Volunteer Event in {location}",
+                description=f"Join us for a meaningful {cause.lower()} volunteer opportunity in {location}. Help make a difference in your community while meeting like-minded individuals.",
+                date=start_date,
+                duration=random.choice([60, 120, 180, 240, 480]),  # 1-8 hours
+                cause=cause,
+                address=f"{random.randint(100, 9999)} {random.choice(['Main St', 'Oak Ave', 'Pine Rd', 'Elm Blvd'])} {location}",
+                nonprofit=random.choice(["Local Food Bank", "Habitat for Humanity", "Red Cross", "United Way", "Boys & Girls Club"]),
+                total_slots=random.randint(5, 50),
+                approved=i < 3,  # First 3 are approved
+                host_org_id=org.id,
+                host_org_name=org.name,
+                comments=[],
+                qualifications=random.sample(["No experience required", "Background check needed", "Must be 18+", "Physical activity involved"], random.randint(1, 3)),
+                recurring=random.choice(["once", "weekly", "monthly"]),
+                visibility=[],
+                attendance_marked=False,
+                redirect_url=None,
+                actual_runtime=None
+            )
+            
+            db.session.add(opportunity)
+            db.session.flush()  # Get the ID
+            generated_data["opportunities"].append(opportunity.serialize())
+        
+        # Commit users, orgs, and opportunities first
+        db.session.commit()
+        with db.session.no_autoflush:   # 👈 Prevent autoflush while querying
+            all_users = User.query.all()
+        
+        # 4. Generate 4 friend requests between users
+        # 4. Generate 4 friend requests between users
+        friend_requests_created = 0
+
+        while friend_requests_created < 4:
+            requester = random.choice(users)   # ✅ use the in-memory list
+            receiver = random.choice(users)
+
+            if requester.id == receiver.id:
+                continue
+
+            # check duplicates manually
+            exists = any(
+                (fr["requester"] == requester.name and fr["receiver"] == receiver.name) or
+                (fr["requester"] == receiver.name and fr["receiver"] == requester.name)
+                for fr in generated_data["friend_requests"]
+            )
+            if exists:
+                continue
+
+            friendship = Friendship(
+                requester_id=requester.id,
+                receiver_id=receiver.id,
+                accepted=random.choice([True, False])
+            )
+
+            db.session.add(friendship)
+            friend_requests_created += 1
+
+            generated_data["friend_requests"].append({
+                "requester": requester.name,
+                "receiver": receiver.name,
+                "accepted": friendship.accepted
+            })
+
+        # Final commit
+        db.session.commit()
+
+        
+        return jsonify({
+            'message': 'Random database schema generated successfully',
+            'generated_data': generated_data,
+            'summary': {
+                'users_created': len(generated_data["users"]),
+                'organizations_created': len(generated_data["organizations"]),
+                'organizations_approved': len([org for org in generated_data["organizations"] if org["approved"]]),
+                'opportunities_created': len(generated_data["opportunities"]),
+                'opportunities_approved': len([opp for opp in generated_data["opportunities"] if opp["approved"]]),
+                'friend_requests_created': len(generated_data["friend_requests"])
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Failed to generate random schema',
             'message': str(e)
         }), 500
 
