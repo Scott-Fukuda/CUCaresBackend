@@ -48,10 +48,10 @@ except Exception as e:
     print("S3 functionality will be disabled.")
 
 # restrict API access to requests from secure origin
-# CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us"])
+CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us"])
 
 # testing
-CORS(app, origins=["http://localhost:5173/"])
+# CORS(app, origins=["http://localhost:5173/"])
 
 
 
@@ -106,9 +106,9 @@ print("Connected!")
 db.init_app(app)
 migrate = Migrate(app, db)
 
-with app.app_context():
+# with app.app_context():
     # For app migrations don't create all tables
-    db.create_all()
+    # db.create_all()
 
     # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
     # User.__table__.drop(db.engine)
@@ -1141,6 +1141,41 @@ def get_unapproved_opportunities():
     except Exception as e:
         return jsonify({
             'message': 'Failed to fetch unapproved opportunities',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/opps/active', methods=['GET'])
+@require_auth
+def get_active_opportunities():
+    """Get active opportunities (start date is no more than 24 hours behind current date) with pagination"""
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10000))
+        
+        # Calculate the cutoff time (24 hours ago from now)
+        cutoff_time = datetime.now() - timedelta(hours=24)
+        
+        # Filter opportunities where date is >= cutoff_time (within last 24 hours)
+        active_opportunities = Opportunity.query.filter(
+            Opportunity.date >= cutoff_time
+        ).order_by(Opportunity.date.asc())  # Order by date ascending (earliest first)
+        
+        paginated_opps = paginate(active_opportunities, page, per_page)
+        
+        return jsonify({
+            'opportunities': [opp.serialize() for opp in paginated_opps.items],
+            'pagination': {
+                'page': paginated_opps.page,
+                'per_page': paginated_opps.per_page,
+                'total': paginated_opps.total
+            },
+            'cutoff_time': cutoff_time.isoformat(),
+            'message': f'Active opportunities from the last 24 hours (since {cutoff_time.strftime("%Y-%m-%d %H:%M:%S")})'
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch active opportunities',
             'error': str(e)
         }), 500
 
