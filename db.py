@@ -80,6 +80,7 @@ class User(db.Model):
     major = db.Column(db.String, nullable=True)
     birthday = db.Column(DateTime, nullable=True)
     car_seats = db.Column(db.Integer, nullable=False, default=0)
+    bio = db.Column(db.String, nullable=True)
     registration_date = db.Column(DateTime, nullable=False, default=datetime.datetime.utcnow) 
 
     organizations = db.relationship(
@@ -126,6 +127,7 @@ class User(db.Model):
         self.major = kwargs.get("major")
         self.birthday = kwargs.get("birthday")
         self.car_seats = kwargs.get("car_seats", 0)
+        self.bio = kwargs.get("bio", None)
         self.registration_date = kwargs.get("registration_date", datetime.datetime.utcnow())
 
     def serialize(self):
@@ -144,6 +146,7 @@ class User(db.Model):
             "major": self.major,
             "birthday": self.birthday,
             "car_seats": self.car_seats,
+            "bio": self.bio,
             "registration_date": self.registration_date,
             "organizations": [l.serialize() for l in self.organizations],
             "opportunities_hosted": [{"name": l.name} for l in self.opportunities_hosted], 

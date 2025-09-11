@@ -496,7 +496,8 @@ def create_user():
                 'academic_level': request.form.get('academic_level'),
                 'major': request.form.get('major'),
                 'birthday': request.form.get('birthday'),
-                'car_seats': car_seats
+                'car_seats': car_seats,
+                'bio': request.form.get('bio')
             }
         else:
             # Handle JSON data
@@ -562,7 +563,8 @@ def create_user():
             graduation_year=data.get('graduation_year'),
             academic_level=data.get('academic_level'),
             major=data.get('major'),
-            birthday=birthday
+            birthday=birthday,
+            bio=data.get('bio')
         )
         
         db.session.add(new_user)
@@ -657,7 +659,7 @@ def update_user(user_id):
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'car_seats', 'email', 'phone', 'points', 'admin', 'gender', 'graduation_year', 'academic_level', 'major', 'birthday']:
+            for field in ['name', 'car_seats', 'email', 'phone', 'points', 'admin', 'gender', 'graduation_year', 'academic_level', 'major', 'birthday', 'bio']:
                 if field in request.form:
                     data[field] = request.form[field]
             
@@ -2076,7 +2078,8 @@ def generate_random_schema():
                 academic_level=random.choice(["Undergraduate", "Graduate", "PhD"]),
                 major=random.choice(["Computer Science", "Business", "Engineering", "Medicine", "Law", "Arts"]),
                 birthday=datetime.now() - timedelta(days=random.randint(6570, 10950)),  # 18-30 years old
-                car_seats=random.randint(0, 7)
+                car_seats=random.randint(0, 7),
+                bio=None
             )
             
             db.session.add(user)
