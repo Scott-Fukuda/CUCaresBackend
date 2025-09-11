@@ -267,6 +267,8 @@ class Opportunity(db.Model):
     recurring = db.Column(db.String, nullable=False, default="once")
     visibility = db.Column(db.JSON, nullable=True, default=list)
     attendance_marked = db.Column(db.Boolean, default=False)
+    redirect_url = db.Column(db.String, nullable=True, default=None)
+    actual_runtime = db.Column(db.Integer, nullable=True)
 
     host_org_id = db.Column(db.Integer, db.ForeignKey("organization.id"))
     host_org = db.relationship("Organization", back_populates="opportunities_hosted")
@@ -297,6 +299,8 @@ class Opportunity(db.Model):
         self.recurring = kwargs.get("recurring", "once")
         self.visibility = kwargs.get("visibility", [])
         self.attendance_marked = kwargs.get("attendance_marked", False)
+        self.redirect_url = kwargs.get("redirect_url", None)
+        self.actual_runtime = kwargs.get("actual_runtime", None)
 
     def serialize(self):
         return {
@@ -319,6 +323,8 @@ class Opportunity(db.Model):
             "recurring": self.recurring,
             "visibility": self.visibility or [],
             "attendance_marked": self.attendance_marked,
+            "redirect_url": self.redirect_url,
+            "actual_runtime": self.actual_runtime,
             "involved_users": [
                 {
                     "user": uo.user.name,
