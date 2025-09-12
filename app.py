@@ -683,7 +683,7 @@ def update_user(user_id):
             data = request.get_json()
         
         # Only update fields that exist in the model
-        valid_fields = ['profile_image', 'name', 'email', 'phone', 'points', 'interests', 'admin', 'gender', 'graduation_year', 'academic_level', 'major', 'birthday']
+        valid_fields = ['profile_image', 'name', 'email', 'phone', 'points', 'interests', 'admin', 'gender', 'graduation_year', 'academic_level', 'major', 'birthday', 'bio', 'car_seats']
         for field in valid_fields:
             if field in data:
                 if field == 'birthday':
