@@ -7,8 +7,8 @@ db = SQLAlchemy()
 # association model — used because a user is related to an opportunity in a more complex way
 class UserOpportunity(db.Model):
     __tablename__ = 'user_opportunity'
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), primary_key=True)
-    opportunity_id = db.Column(db.Integer, db.ForeignKey('opportunity.id'), primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), primary_key=True)
+    opportunity_id = db.Column(db.Integer, db.ForeignKey('opportunity.id', ondelete='CASCADE'), primary_key=True)
     registered = db.Column(db.Boolean, default=False)
     attended = db.Column(db.Boolean, default=False)
     driving = db.Column(db.Boolean, default=False)
