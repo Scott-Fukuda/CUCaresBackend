@@ -981,6 +981,13 @@ def create_opportunity():
         
         gmt_date = parsed_date + timedelta(hours=4)
 
+
+        # admin users can create approved opps
+        if request.host_user.get('admin'):
+            approved = True
+        else:
+            approved = False
+            
         # Create new opportunity
         new_opportunity = Opportunity(
             name=data['name'],
@@ -1001,7 +1008,8 @@ def create_opportunity():
             visibility=data.get('visibility', []),
             attendance_marked=data.get('attendance_marked', False),
             redirect_url=data.get('redirect_url', None),
-            actual_runtime=data.get('actual_runtime', None)
+            actual_runtime=data.get('actual_runtime', None),
+            approved=approved
         )
         
         db.session.add(new_opportunity)
