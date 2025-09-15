@@ -929,7 +929,7 @@ def create_opportunity():
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'cause', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']:
+            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']:
                 if field in request.form:
                     data[field] = request.form[field]
             
@@ -938,7 +938,7 @@ def create_opportunity():
             data = request.get_json()
         
         # Validate required fields
-        required_fields = ['name', 'host_org_id', 'host_user_id', 'date', 'cause', 'duration']
+        required_fields = ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'duration']
         if not all(field in data for field in required_fields):
             return jsonify({
                 'message': 'Missing required fields',
@@ -987,7 +987,7 @@ def create_opportunity():
             description=data.get('description'),
             date=gmt_date, 
             duration=data['duration'],
-            cause=data.get('cause'),
+            causes=data.get('causes'),
             address=data.get('address'),
             nonprofit=data.get('nonprofit'),
             total_slots=data.get('total_slots'),
@@ -1243,7 +1243,7 @@ def update_opportunity(opp_id):
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'cause', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'duration','qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']:
+            for field in ['name', 'causes', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'duration','qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']:
                 if field in request.form:
                     data[field] = request.form[field]
                 if field == 'date':
@@ -2110,7 +2110,7 @@ def generate_random_schema():
         db.session.commit()
         # 3. Generate 5 opportunities, approve 3
         for i in range(5):
-            cause = random.choice(causes)
+            causes = random.choice(causes)
             location = random.choice(locations)
             org = organizations[i % 5]  # Use our list instead of querying
             
@@ -2118,11 +2118,11 @@ def generate_random_schema():
             start_date = datetime.now() + timedelta(days=random.randint(1, 90))
             
             opportunity = Opportunity(
-                name=f"{cause} Volunteer Event in {location}",
-                description=f"Join us for a meaningful {cause.lower()} volunteer opportunity in {location}. Help make a difference in your community while meeting like-minded individuals.",
+                name=f"{causes} Volunteer Event in {location}",
+                description=f"Join us for a meaningful {causes.lower()} volunteer opportunity in {location}. Help make a difference in your community while meeting like-minded individuals.",
                 date=start_date,
                 duration=random.choice([60, 120, 180, 240, 480]),  # 1-8 hours
-                cause=cause,
+                causes=causes,
                 address=f"{random.randint(100, 9999)} {random.choice(['Main St', 'Oak Ave', 'Pine Rd', 'Elm Blvd'])} {location}",
                 nonprofit=random.choice(["Local Food Bank", "Habitat for Humanity", "Red Cross", "United Way", "Boys & Girls Club"]),
                 total_slots=random.randint(5, 50),

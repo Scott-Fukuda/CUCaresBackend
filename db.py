@@ -258,7 +258,7 @@ class Opportunity(db.Model):
     description = db.Column(db.String, nullable=True)
     date = db.Column(DateTime, nullable=False)
     duration = db.Column(db.Integer, nullable=False)
-    cause = db.Column(db.String, nullable=True)
+    causes = db.Column(db.JSON, nullable=True, default=list)
     address = db.Column(db.String, nullable=False)
     nonprofit = db.Column(db.String, nullable=True)
     total_slots = db.Column(db.Integer, nullable=True)
@@ -288,7 +288,7 @@ class Opportunity(db.Model):
         self.description = kwargs.get("description")
         self.date = kwargs.get("date")
         self.duration = kwargs.get("duration") # duration in mintues
-        self.cause = kwargs.get("cause")
+        self.causes = kwargs.get("causes", [])
         self.address = kwargs.get("address")
         self.nonprofit = kwargs.get("nonprofit")
         self.total_slots = kwargs.get("total_slots")
@@ -312,7 +312,7 @@ class Opportunity(db.Model):
             "description": self.description,
             "date": self.date,
             "duration": self.duration,
-            "cause": self.cause,
+            "causes": self.causes or [],
             "address": self.address,
             "nonprofit": self.nonprofit,
             "total_slots": self.total_slots,
