@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 import boto3
 from flask_migrate import Migrate
 import random
+import redis
+from celery import Celery
 
 # define db filename
 db_filename = "cucares.db"
@@ -2211,6 +2213,67 @@ def generate_random_schema():
         db.session.rollback()
         return jsonify({
             'error': 'Failed to generate random schema',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/monthly-points', methods=['GET'])
+@require_auth
+def get_monthly_points():
+    """Get all users and their points earned from a given date to present"""
+    try:
+        # Get the date from query parameters
+        date_str = request.args.get('date')
+        if not date_str:
+            return jsonify({
+                'error': 'Date parameter is required',
+                'message': 'Please provide a date in YYYY-MM-DD format'
+            }), 400
+        
+        # Parse the date
+        try:
+            from_date = datetime.strptime(date_str, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({
+                'error': 'Invalid date format',
+                'message': 'Date must be in YYYY-MM-DD format'
+            }), 400
+        
+        # Get all users
+        users = User.query.all()
+        user_points = []
+        
+        for user in users:
+            total_points = 0
+            
+            # Get all user opportunities where user attended
+            user_opportunities = UserOpportunity.query.filter_by(
+                user_id=user.id,
+                attended=True
+            ).all()
+            
+            for uo in user_opportunities:
+                opportunity = uo.opportunity
+                
+                # Check if opportunity date is on or after the given date
+                if opportunity.date >= from_date:
+                    # Use actual_runtime if available, otherwise use duration
+                    if opportunity.actual_runtime is not None:
+                        total_points += opportunity.actual_runtime
+                    else:
+                        total_points += opportunity.duration
+            
+            user_points.append({
+                'id': user.id,
+                'points': total_points
+            })
+        
+        return jsonify({
+            'users': user_points
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'error': 'Failed to calculate monthly points',
             'message': str(e)
         }), 500
 
