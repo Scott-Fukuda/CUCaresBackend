@@ -937,7 +937,7 @@ def create_opportunity():
             data = request.get_json()
         
         # Validate required fields
-        required_fields = ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'duration']
+        required_fields = ['name', 'host_org_id', 'host_user_id', 'date', 'duration']
         if not all(field in data for field in required_fields):
             return jsonify({
                 'message': 'Missing required fields',
