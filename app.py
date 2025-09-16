@@ -983,7 +983,7 @@ def create_opportunity():
 
 
         # admin users can create approved opps
-        if request.host_user.get('admin'):
+        if host_user.get('admin'):
             approved = True
         else:
             approved = False
