@@ -398,43 +398,40 @@ def marked_as_attended():
         return jsonify({"error": "user_ids and opportunity_id are required"}), 400
 
     messages = []
-    try:    
+    try:
         opp = Opportunity.query.get(opportunity_id)
         if not opp:
             return jsonify({"error": "Invalid opportunity_id"}), 404
 
+        # Fetch existing registrations for these users
+        user_opps = UserOpportunity.query.filter(
+            UserOpportunity.user_id.in_(user_ids),
+            UserOpportunity.opportunity_id == opportunity_id
+        ).all()
+
+        # Map by user_id for O(1) lookup
+        user_opp_map = {uo.user_id: uo for uo in user_opps}
+
         for user_id in user_ids:
-            user = User.query.get(user_id)
-            if not user:
-                messages.append({"user_id": user_id, "error": "Invalid user_id"})
+            uo = user_opp_map.get(user_id)
+
+            if not uo:
+                # Not registered -> skip
+                messages.append({"user_id": user_id, "error": "User not registered for this opportunity"})
                 continue
 
-            existing = UserOpportunity.query.filter_by(
-                user_id=user_id, opportunity_id=opportunity_id
-            ).first()
-
-            if existing:
-                if not existing.attended:
-                    existing.attended = True
-                    existing.driving = driving
-                    user.points += duration
-                    opp.actual_runtime = duration
-                    messages.append({"user_id": user_id, "message": "Attendance updated & points awarded"})
-                else:
-                    messages.append({"user_id": user_id, "message": "User already marked as attended"})
+            if not uo.attended:
+                uo.attended = True
+                uo.driving = driving
+                uo.user.points += duration  # Award points to the User
+                messages.append({"user_id": user_id, "message": "Attendance updated & points awarded"})
             else:
-                user_opportunity = UserOpportunity(
-                    user_id=user_id,
-                    opportunity_id=opportunity_id,
-                    registered=False,
-                    attended=True,
-                    driving=driving
-                )
-                db.session.add(user_opportunity)
-                user.points += duration
-                messages.append({"user_id": user_id, "message": "Marked as attended and registered, points awarded"})
+                messages.append({"user_id": user_id, "message": "User already marked as attended"})
 
+        # Update opportunity metadata
+        opp.actual_runtime = duration
         opp.attendance_marked = True
+
         db.session.commit()
         return jsonify({"results": messages}), 200
 
