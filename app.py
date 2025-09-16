@@ -928,7 +928,7 @@ def create_opportunity():
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']:
+            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'tags', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']:
                 if field in request.form:
                     data[field] = request.form[field]
             
@@ -994,6 +994,7 @@ def create_opportunity():
             date=gmt_date, 
             duration=data['duration'],
             causes=data.get('causes'),
+            tags=data.get('tags', []),
             address=data.get('address'),
             nonprofit=data.get('nonprofit'),
             total_slots=data.get('total_slots'),
@@ -1250,7 +1251,7 @@ def update_opportunity(opp_id):
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'causes', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'duration','qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']:
+            for field in ['name', 'causes', 'tags', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'duration','qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']:
                 if field in request.form:
                     data[field] = request.form[field]
                 if field == 'date':
@@ -1270,7 +1271,7 @@ def update_opportunity(opp_id):
         
         # Only update fields that exist in the model
         valid_fields = ['name', 'duration', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'image',
-                       'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']       
+                       'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime', 'tags']       
         
         for field in valid_fields:
             if field in data:
@@ -2130,6 +2131,7 @@ def generate_random_schema():
                 date=start_date,
                 duration=random.choice([60, 120, 180, 240, 480]),  # 1-8 hours
                 causes=causes,
+                tags=random.sample(["volunteer", "community", "service", "outdoor", "indoor", "teamwork", "leadership", "creative"], random.randint(1, 3)),
                 address=f"{random.randint(100, 9999)} {random.choice(['Main St', 'Oak Ave', 'Pine Rd', 'Elm Blvd'])} {location}",
                 nonprofit=random.choice(["Local Food Bank", "Habitat for Humanity", "Red Cross", "United Way", "Boys & Girls Club"]),
                 total_slots=random.randint(5, 50),
