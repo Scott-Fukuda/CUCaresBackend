@@ -771,7 +771,8 @@ def create_organization():
             member_count=data.get('member_count', 0),
             points=data.get('points', 0),
             type=data.get('type'),
-            approved=data.get('approved', False),
+            # approved=data.get('approved', False),
+            approved=True,
             host_user_id=data['host_user_id']
         )
         
