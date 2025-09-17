@@ -415,7 +415,8 @@ def marked_as_attended():
         first_user = True
         for user_id in user_ids:
             uo = user_opp_map.get(user_id)
-            if first_user and uo.attended:
+
+            if first_user:
                 uo.user.points += 5 # bonus points
                 first_user = False
 
