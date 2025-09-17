@@ -771,9 +771,11 @@ def create_organization():
             member_count=data.get('member_count', 0),
             points=data.get('points', 0),
             type=data.get('type'),
+            # auto approve orgs
             # approved=data.get('approved', False),
             approved=True,
-            host_user_id=data['host_user_id']
+            host_user_id=data['host_user_id'],
+            date_created=data.get('date_created', '')
         )
         
         db.session.add(new_org)
@@ -890,7 +892,7 @@ def update_organization(org_id):
         data = request.get_json()
         
         # Only update fields that exist in the model
-        valid_fields = ['name', 'description', 'member_count', 'points', 'type', 'host_user_id', 'approved']
+        valid_fields = ['name', 'description', 'member_count', 'points', 'type', 'host_user_id', 'approved', 'date_created']
         for field in valid_fields:
             if field in data:
                 setattr(org, field, data[field])
@@ -2152,7 +2154,8 @@ def generate_random_schema():
                 member_count=random.randint(10, 200),
                 points=random.randint(50, 1000),
                 type=org_type,
-                approved=i < 3  # First 3 are approved
+                approved=i < 3,  # First 3 are approved
+                date_created=""
             )
             
             db.session.add(org)

@@ -205,6 +205,7 @@ class Organization(db.Model):
     points = db.Column(db.Integer, nullable=False)
     type = db.Column(db.String, nullable=False)
     approved = db.Column(db.Boolean, default=False)
+    date_created = db.Column(db.String, nullable=True, default="")
 
     users = db.relationship(
         "User", 
@@ -226,6 +227,7 @@ class Organization(db.Model):
         self.points = kwargs.get("points", 0)
         self.host_user_id = kwargs.get("host_user_id")
         self.approved = kwargs.get("approved", False)
+        self.date_created = kwargs.get("date_created", "")
 
     def serialize(self):
         return {
@@ -237,6 +239,7 @@ class Organization(db.Model):
             "points": self.points,
             "host_user_id": self.host_user_id,
             "approved": self.approved,
+            "date_created": self.date_created,
             "users": [
                 { 
                     "name": user.name,
