@@ -412,8 +412,12 @@ def marked_as_attended():
         # Map by user_id for O(1) lookup
         user_opp_map = {uo.user_id: uo for uo in user_opps}
 
+        first_user = True
         for user_id in user_ids:
             uo = user_opp_map.get(user_id)
+            if first_user and uo.attended:
+                uo.user.points += 5 # bonus points
+                first_user = False
 
             if not uo:
                 # Not registered -> skip
