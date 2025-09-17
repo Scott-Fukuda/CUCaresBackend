@@ -1202,6 +1202,45 @@ def get_involved_users_phone_numbers(opp_id):
             'error': str(e)
         }), 500
 
+@app.route('/api/opps/<int:opp_id>/attendance', methods=['GET'])
+@require_auth
+def get_opportunity_attendance(opp_id):
+    """Get all involved user IDs and their attendance status for an opportunity"""
+    try:
+        # Check if opportunity exists
+        opportunity = Opportunity.query.get(opp_id)
+        if not opportunity:
+            return jsonify({
+                'message': 'Opportunity not found',
+                'error': f'Opportunity with ID {opp_id} does not exist'
+            }), 404
+        
+        # Get all user opportunities for this opportunity
+        user_opportunities = UserOpportunity.query.filter_by(opportunity_id=opp_id).all()
+        
+        # Build response with user IDs and attendance status
+        attendance_data = []
+        for uo in user_opportunities:
+            attendance_data.append({
+                'user_id': uo.user_id,
+                'attended': uo.attended,
+                'registered': uo.registered,
+                'driving': uo.driving
+            })
+        
+        return jsonify({
+            'opportunity_id': opp_id,
+            'opportunity_name': opportunity.name,
+            'total_involved': len(attendance_data),
+            'users': attendance_data
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch opportunity attendance',
+            'error': str(e)
+        }), 500
+
 
 @app.route('/api/opps/<int:opp_id>', methods=['GET'])
 @require_auth
