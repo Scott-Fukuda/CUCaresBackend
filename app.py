@@ -583,6 +583,19 @@ def create_user():
             'error': str(e)
         }), 500
 
+@app.route('/api/users/emails', methods=['GET'])
+@require_auth
+def get_user_emails():
+    """Get all user emails"""
+    try:
+        users = User.query.all()
+        return jsonify([user.email for user in users])
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch user emails',
+            'error': str(e)
+        }), 500
+
 @app.route('/api/users', methods=['GET'])
 @require_auth
 def get_users():
