@@ -636,8 +636,8 @@ def get_user(user_id):
             'error': str(e)
         }), 500
 
-@app.route('/api/users/email/<email>', methods=['GET'])
-def get_user_by_email(email):
+@app.route('/api/users/check/<email>', methods=['GET'])
+def check_user_exists(email):
     """Get user by email - Login only: Quick check if user exists with minimal data"""
     try:
         user = User.query.filter_by(email=email).first()
@@ -658,6 +658,26 @@ def get_user_by_email(email):
                 'admin': user.admin,
             }
         }), 200
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch user by email',
+            'error': str(e)
+        }), 500
+    
+@app.route('/api/users/email/<email>', methods=['GET'])
+def get_user_by_email(email):
+    """Get user by email - Login only: Quick check if user exists with minimal data"""
+    try:
+        user = User.query.filter_by(email=email).first()
+        
+        if not user:
+            return jsonify({
+                'message': 'User does not exist',
+            }), 404
+        
+        # Return minimal user data for authentication
+        return jsonify(user.serialize()), 200
     
     except Exception as e:
         return jsonify({
