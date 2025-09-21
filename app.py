@@ -666,6 +666,7 @@ def check_user_exists(email):
         }), 500
     
 @app.route('/api/users/email/<email>', methods=['GET'])
+@require_auth
 def get_user_by_email(email):
     """Get user by email - Login only: Quick check if user exists with minimal data"""
     try:
