@@ -644,9 +644,9 @@ def get_user_by_email(email):
         
         if not user:
             return jsonify({
-                'message': 'User not found',
+                'message': 'User does not exist',
                 'exists': False
-            }), 404
+            }), 200
         
         # Return minimal user data for authentication
         return jsonify({
