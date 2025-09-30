@@ -2360,6 +2360,7 @@ def get_monthly_points():
 
 
 @app.route('/api/users/csv', methods=['GET'])
+@require_auth
 def get_users_csv():
     """Return users as CSV attachment with requested columns."""
     try:
@@ -2427,6 +2428,7 @@ def get_users_csv():
 
 
 @app.route('/api/opps/csv', methods=['GET'])
+@require_auth
 def get_opps_csv():
     """Return opportunities as CSV attachment with requested columns."""
     try:
