@@ -1,7 +1,7 @@
 import json
 import os
 import uuid
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, make_response
 from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail
 
 from datetime import datetime, timedelta, timezone
@@ -2357,6 +2357,135 @@ def get_monthly_points():
             'error': 'Failed to calculate monthly points',
             'message': str(e)
         }), 500
+
+
+@app.route('/api/users/csv', methods=['GET'])
+def get_users_csv():
+    """Return users as CSV attachment with requested columns."""
+    try:
+        import csv
+        import io
+
+        users = User.query.all()
+
+        si = io.StringIO()
+        writer = csv.writer(si)
+
+        # header
+        writer.writerow([
+            'friend_count',
+            'opportunities_registered',
+            'opportunities_attended',
+            'opportunities_hosted',
+            'organizations_hosted',
+            'car_seats',
+            'points',
+            'registration_date',
+            'graduation_year',
+            'has_bio',
+            'has_profile_image'
+        ])
+
+        for user in users:
+            friend_count = len(user.get_accepted_friends())
+            opp_registered = sum(1 for uo in user.user_opportunities if getattr(uo, 'registered', False))
+            opp_attended = sum(1 for uo in user.user_opportunities if getattr(uo, 'attended', False))
+            opp_hosted = len(user.opportunities_hosted or [])
+            # organizations hosted: organizations where this user is host_user
+            organizations_hosted = Organization.query.filter_by(host_user_id=user.id).count()
+            car_seats = user.car_seats if user.car_seats is not None else 0
+            points = user.points if user.points is not None else 0
+            registration_date = user.registration_date.isoformat() if getattr(user, 'registration_date', None) else ''
+            graduation_year = user.graduation_year or ''
+            has_bio = bool(user.bio)
+            has_profile_image = bool(user.profile_image)
+
+            writer.writerow([
+                friend_count,
+                opp_registered,
+                opp_attended,
+                opp_hosted,
+                organizations_hosted,
+                car_seats,
+                points,
+                registration_date,
+                graduation_year,
+                int(has_bio),
+                int(has_profile_image),
+            ])
+
+        output = si.getvalue()
+        si.close()
+
+        response = make_response(output)
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = 'attachment; filename="data.csv"'
+        return response
+
+    except Exception as e:
+        return jsonify({'error': 'Failed to generate users CSV', 'message': str(e)}), 500
+
+
+@app.route('/api/opps/csv', methods=['GET'])
+def get_opps_csv():
+    """Return opportunities as CSV attachment with requested columns."""
+    try:
+        import csv
+        import io
+
+        opps = Opportunity.query.all()
+
+        si = io.StringIO()
+        writer = csv.writer(si)
+
+        writer.writerow([
+            'duration',
+            'actual_runtime',
+            'total_slots',
+            'total_attended',
+            'address',
+            'date',
+            'num_comments',
+            'approved',
+            'has_image',
+            'has_description'
+        ])
+
+        for opp in opps:
+            duration = opp.duration
+            actual_runtime = opp.actual_runtime if opp.actual_runtime is not None else ''
+            total_slots = opp.total_slots if opp.total_slots is not None else ''
+            total_attended = sum(1 for uo in (opp.user_opportunities or []) if getattr(uo, 'attended', False))
+            address = opp.address or ''
+            date = opp.date.isoformat() if getattr(opp, 'date', None) else ''
+            num_comments = len(opp.comments or [])
+            approved = bool(opp.approved)
+            has_image = int(bool(opp.image))
+            has_description = int(bool(opp.description))
+
+            writer.writerow([
+                duration,
+                actual_runtime,
+                total_slots,
+                total_attended,
+                address,
+                date,
+                num_comments,
+                int(approved),
+                has_image,
+                has_description,
+            ])
+
+        output = si.getvalue()
+        si.close()
+
+        response = make_response(output)
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = 'attachment; filename="data.csv"'
+        return response
+
+    except Exception as e:
+        return jsonify({'error': 'Failed to generate opportunities CSV', 'message': str(e)}), 500
 
 
 if __name__ == "__main__":
