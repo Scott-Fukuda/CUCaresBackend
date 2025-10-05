@@ -973,7 +973,8 @@ def create_opportunity():
             for field in ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'tags', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']:
                 if field in request.form:
                     if field == 'visibility':
-                        data[field] = request.form.getlist('visibility')
+                        data[field] = json.loads(request.form["visibility"])
+
                     else: 
                         data[field] = request.form[field]
             
