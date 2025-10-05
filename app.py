@@ -972,7 +972,10 @@ def create_opportunity():
             data = {}
             for field in ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'tags', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']:
                 if field in request.form:
-                    data[field] = request.form[field]
+                    if field == 'visibility':
+                        data[field] = request.form.getlist('visibility')
+                    else: 
+                        data[field] = request.form[field]
             
         else:
             # Handle JSON data
