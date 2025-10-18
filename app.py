@@ -2,7 +2,7 @@ import json
 import os
 import uuid
 from flask import Flask, request, jsonify, send_from_directory, make_response
-from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail
+from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail, Waiver
 
 from datetime import datetime, timedelta, timezone
 from flask_cors import CORS
@@ -15,6 +15,8 @@ from flask_migrate import Migrate
 import random
 import redis
 from celery import Celery
+from functools import wraps
+import traceback
 
 # define db filename
 db_filename = "cucares.db"
@@ -50,7 +52,7 @@ except Exception as e:
     print("S3 functionality will be disabled.")
 
 # restrict API access to requests from secure origin
-CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us", "http://localhost:5173"])
+CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us", "http://localhost:5173", "http://localhost:5173"], supports_credentials=True)
 
 
 # Initialize Firebase Admin SDK
@@ -123,7 +125,10 @@ def paginate(query, page=1, per_page=20):
 # Authentication middleware function
 def require_auth(f):
     """Decorator to require Firebase authentication for endpoints"""
+    @wraps(f)
     def decorated_function(*args, **kwargs):
+        if request.method == "OPTIONS":
+            return '', 200
         try:
             # Get the Authorization header
             auth_header = request.headers.get('Authorization')
@@ -628,6 +633,7 @@ def get_user(user_id):
     """Get a single user"""
     try:
         user = User.query.get_or_404(user_id)
+        print('user', user.serialize())
         return jsonify(user.serialize())
     
     except Exception as e:
@@ -2489,6 +2495,54 @@ def get_opps_csv():
     except Exception as e:
         return jsonify({'error': 'Failed to generate opportunities CSV', 'message': str(e)}), 500
 
+# Waiver endpoints
+@app.route('/api/waivers/create-waiver', methods=['POST', 'OPTIONS'])
+@require_auth
+def create_waiver():
+    """Create a new waiver"""
+    try:
+        data = request.get_json()
+        
+        required_fields = ['typed_name', 'type', 'content', 'checked_consent', 'user_id']
+        if not all(field in data for field in required_fields):
+            return jsonify({
+                'message': 'Missing required fields',
+                'required': required_fields
+            }), 400
+        
+        user = User.query.get(data['user_id'])
+
+        if not user:
+            return jsonify({
+                'message': 'User does not exist'
+            })        
+        
+        ip = request.remote_addr
+
+        new_waiver = Waiver(
+            typed_name=data.get('typed_name'),
+            type=data.get('type'),
+            content=data.get('content'),
+            checked_consent=data.get('checked_consent'),
+            ip_address=ip,
+            user_id=data.get('user_id'),
+            organization_id=data.get('organization_id')
+        )
+        
+        db.session.add(new_waiver)
+        user.carpool_waiver_signed = True
+        db.session.commit()
+        
+        return jsonify(new_waiver.serialize()), 201
+    
+    except Exception as e:
+        db.session.rollback()
+        print("Error in /api/waivers/create-waiver:")
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Failed to create waiver',
+            'error': str(e)
+        }), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 8000))
