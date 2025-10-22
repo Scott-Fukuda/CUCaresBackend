@@ -16,6 +16,7 @@ from flask_migrate import Migrate
 import random
 import redis
 from celery import Celery
+import csv, io
 
 # define db filename
 db_filename = "cucares.db"
@@ -2369,8 +2370,6 @@ def get_monthly_points():
 def get_users_csv():
     """Return users as CSV attachment with requested columns."""
     try:
-        import csv
-        import io
 
         users = User.query.all()
 
@@ -2437,9 +2436,6 @@ def get_users_csv():
 def get_opps_csv():
     """Return opportunities as CSV attachment with requested columns."""
     try:
-        import csv
-        import io
-
         opps = Opportunity.query.all()
 
         si = io.StringIO()
