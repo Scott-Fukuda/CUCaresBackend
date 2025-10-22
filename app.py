@@ -2501,7 +2501,8 @@ def service_opps(user_id):
             Opportunity.date,
             UserOpportunity.driving,
             Opportunity.host_user_id,
-            Opportunity.duration
+            Opportunity.duration,
+            UserOpportunity.attended
         )
         .join(UserOpportunity, UserOpportunity.opportunity_id == Opportunity.id)
         .filter(UserOpportunity.user_id == user_id)
@@ -2515,9 +2516,10 @@ def service_opps(user_id):
             "date": date,
             "driver": driving,
             "host": (host_user_id == user_id),
-            "duration": duration
+            "duration": duration,
+            "attended": attended
         }
-        for name, date, driving, host_user_id, duration in rows
+        for name, date, driving, host_user_id, duration, attended in rows
     ]
 
     return jsonify(result), 200
@@ -2535,7 +2537,8 @@ def service_opps_csv(user_id):
             Opportunity.date,
             UserOpportunity.driving,
             Opportunity.host_user_id,
-            Opportunity.duration
+            Opportunity.duration,
+            UserOpportunity.attended
         )
         .join(UserOpportunity, UserOpportunity.opportunity_id == Opportunity.id)
         .filter(UserOpportunity.user_id == user_id)
@@ -2545,15 +2548,16 @@ def service_opps_csv(user_id):
     # Create an in-memory CSV
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["name", "date", "driver", "host", "duration"])  # header row
+    writer.writerow(["name", "date", "driver", "host", "duration", "attended"])  # header row
 
-    for name, date, driving, host_user_id, duration in rows:
+    for name, date, driving, host_user_id, duration, attended in rows:
         writer.writerow([
             name,
             date.isoformat() if date else "",
             "true" if driving else "false",
             "host" if host_user_id == user_id else "participant",
-            duration
+            duration,
+            "true" if attended else "false"
         ])
 
     csv_data = output.getvalue()
