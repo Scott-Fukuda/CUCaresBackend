@@ -3,6 +3,7 @@ import os
 import uuid
 from flask import Flask, request, jsonify, send_from_directory, make_response
 from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail
+from sqlalchemy import select
 
 from datetime import datetime, timedelta, timezone
 from flask_cors import CORS
@@ -2492,6 +2493,82 @@ def get_opps_csv():
 
     except Exception as e:
         return jsonify({'error': 'Failed to generate opportunities CSV', 'message': str(e)}), 500
+
+# SERVICE JOURNAL ENDPOINTS
+@app.route('/api/service-journal/opps/<int:user_id>', methods=['GET'])
+@require_auth
+def service_opps(user_id):
+    # Query only the columns you need — no model overhead
+    rows = (
+        db.session.query(
+            Opportunity.name,
+            Opportunity.date,
+            UserOpportunity.driving,
+            Opportunity.host_user_id,
+            Opportunity.duration
+        )
+        .join(UserOpportunity, UserOpportunity.opportunity_id == Opportunity.id)
+        .filter(UserOpportunity.user_id == user_id)
+        .all()
+    )
+
+    # Convert results to JSON-serializable dicts
+    result = [
+        {
+            "name": name,
+            "date": date,
+            "driver": driving,
+            "host": (host_user_id == user_id),
+            "duration": duration
+        }
+        for name, date, driving, host_user_id, duration in rows
+    ]
+
+    return jsonify(result), 200
+
+@app.route('/api/service-journal/opps/<int:user_id>/csv', methods=['GET'])
+@require_auth
+def service_opps_csv(user_id):
+    """
+    Return opportunities as CSV attachment with requested columns.
+    """
+    # Query only the needed columns efficiently
+    stmt = (
+        select(
+            Opportunity.name,
+            Opportunity.date,
+            UserOpportunity.driving,
+            Opportunity.host_user_id,
+            Opportunity.duration
+        )
+        .join(UserOpportunity, UserOpportunity.opportunity_id == Opportunity.id)
+        .filter(UserOpportunity.user_id == user_id)
+    )
+    rows = db.session.execute(stmt).all()
+
+    # Create an in-memory CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["name", "date", "driver", "host", "duration"])  # header row
+
+    for name, date, driving, host_user_id in rows:
+        writer.writerow([
+            name,
+            date.isoformat() if date else "",
+            "true" if driving else "false",
+            "host" if host_user_id == user_id else "participant"
+        ])
+
+    csv_data = output.getvalue()
+    output.close()
+
+    # Build HTTP response
+    response = make_response(csv_data)
+    
+    response.headers['Content-Type'] = 'text/csv'
+    response.headers['Content-Disposition'] = 'attachment; ffilename=service_opps_user_{user_id}.csv'
+
+    return response
 
 
 if __name__ == "__main__":
