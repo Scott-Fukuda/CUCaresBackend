@@ -2547,12 +2547,13 @@ def service_opps_csv(user_id):
     writer = csv.writer(output)
     writer.writerow(["name", "date", "driver", "host", "duration"])  # header row
 
-    for name, date, driving, host_user_id in rows:
+    for name, date, driving, host_user_id, duration in rows:
         writer.writerow([
             name,
             date.isoformat() if date else "",
             "true" if driving else "false",
-            "host" if host_user_id == user_id else "participant"
+            "host" if host_user_id == user_id else "participant",
+            duration
         ])
 
     csv_data = output.getvalue()
