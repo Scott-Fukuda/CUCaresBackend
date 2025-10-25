@@ -115,6 +115,7 @@ class User(db.Model):
     )
 
     waiver = db.relationship("Waiver", back_populates="user")
+    ride_riders = db.relationship("RideRider", back_populates="user")
 
     def __init__(self, **kwargs):
         self.profile_image = kwargs.get("profile_image")
@@ -283,6 +284,7 @@ class Opportunity(db.Model):
     attendance_marked = db.Column(db.Boolean, default=False)
     redirect_url = db.Column(db.String, nullable=True, default=None)
     actual_runtime = db.Column(db.Integer, nullable=True)
+    allow_carpool = db.Column(db.Boolean, nullable=False, default=False)
 
     host_org_id = db.Column(db.Integer, db.ForeignKey("organization.id"))
     host_org = db.relationship("Organization", back_populates="opportunities_hosted")
@@ -291,8 +293,7 @@ class Opportunity(db.Model):
     host_user = db.relationship("User", back_populates="opportunities_hosted")
 
     user_opportunities = db.relationship('UserOpportunity', back_populates='opportunity', cascade="all", passive_deletes=True)
-    
-
+    carpool = db.relationship("Carpool", back_populates="opportunity", cascade="all, delete-orphan", passive_deletes=True, uselist=False)
 
     def __init__(self, **kwargs):
         self.name = kwargs.get("name")
@@ -316,6 +317,7 @@ class Opportunity(db.Model):
         self.attendance_marked = kwargs.get("attendance_marked", False)
         self.redirect_url = kwargs.get("redirect_url", None)
         self.actual_runtime = kwargs.get("actual_runtime", None)
+        self.allow_carpool = kwargs.get("allow_carpool", False)
 
     def serialize(self):
         return {
@@ -341,6 +343,8 @@ class Opportunity(db.Model):
             "attendance_marked": self.attendance_marked,
             "redirect_url": self.redirect_url,
             "actual_runtime": self.actual_runtime,
+            "allow_carpool": self.allow_carpool,
+            "carpool_id": self.carpool.id if self.carpool else None,
             "involved_users": [
                 {
                     "user": uo.user.name,
@@ -384,4 +388,51 @@ class Waiver(db.Model):
             "checked_consent": self.checked_consent,
             "user_id": self.user_id,
             "organization_id": self.organization_id
+        }
+
+class Carpool(db.Model):
+    __tablename__ = "carpool"
+    id = db.Column(db.Integer, primary_key=True)
+    opportunity_id = db.Column(db.Integer, db.ForeignKey("opportunity.id", ondelete="CASCADE"), nullable=False)
+
+    rides = db.relationship("Ride", back_populates="carpool", cascade="all, delete-orphan", passive_deletes=True)
+    opportunity = db.relationship("Opportunity", back_populates="carpool")
+
+    def serialize(self):
+        return {
+            "id": self.id,
+            "opportunity_id": self.opportunity_id
+        }
+
+class RideRider(db.Model):
+    __tablename__ = "ride_riders"
+    id = db.Column(db.Integer, primary_key=True)
+    ride_id = db.Column(db.Integer, db.ForeignKey("ride.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    pickup_location = db.Column(db.String, nullable=False)
+
+    ride = db.relationship("Ride", back_populates="ride_riders")
+    user = db.relationship("User", back_populates="ride_riders")
+
+    def serialize(self):
+        return {
+            "ride_id": self.ride_id,
+            "user_id": self.user_id,
+            "pickup_location": self.pickup_location
+        }
+
+class Ride(db.Model):
+    __tablename__ = "ride"
+    id = db.Column(db.Integer, primary_key=True)
+    carpool_id = db.Column(db.Integer, db.ForeignKey("carpool.id"), nullable=False)
+    driver_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+
+    carpool = db.relationship("Carpool", back_populates="rides")
+    ride_riders = db.relationship("RideRider", back_populates="ride", cascade="all, delete-orphan")
+
+    def serialize(self):
+        return {
+            "id": self.id,
+            "carpool_id": self.carpool_id,
+            "driver_id": self.driver_id
         }

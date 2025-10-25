@@ -2,8 +2,7 @@ import json
 import os
 import uuid
 from flask import Flask, request, jsonify, send_from_directory, make_response
-from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail, Waiver
-
+from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail, Waiver, Carpool, Ride, RideRider
 from datetime import datetime, timedelta, timezone
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
@@ -976,7 +975,7 @@ def create_opportunity():
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'tags', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']:
+            for field in ['name', 'host_org_id', 'host_user_id', 'date', 'causes', 'tags', 'duration', 'description', 'address', 'nonprofit', 'total_slots', 'image', 'approved', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime', 'allow_carpool']:
                 if field in request.form:
                     data[field] = request.form[field]
             
@@ -1057,11 +1056,20 @@ def create_opportunity():
             attendance_marked=data.get('attendance_marked', False),
             redirect_url=data.get('redirect_url', None),
             actual_runtime=data.get('actual_runtime', None),
-            approved=approved
+            approved=approved,
+            allow_carpool=data.get('allow_carpool').lower() == "true"
         )
         
         db.session.add(new_opportunity)
         db.session.commit()
+
+        allow_carpool = data.get('allow_carpool')
+        if allow_carpool:
+            new_carpool = Carpool(
+                opportunity=new_opportunity
+            )
+            db.session.add(new_carpool)
+            db.session.commit()
 
         # mark host as registered with registered=False
         user_opportunity = UserOpportunity(
@@ -2543,6 +2551,123 @@ def create_waiver():
             'message': 'Failed to create waiver',
             'error': str(e)
         }), 500
+    
+# Carpool endpoints
+@app.route('/api/carpool', methods=['POST'])
+@require_auth
+def create_carpool():
+    try:
+        data = request.get_json()
+
+        opportunity_id = data['opportunity_id']
+        if not opportunity_id:
+            return jsonify({
+                'message': 'Missing opportunity id',
+                'required': 'opportunity_id'
+            }), 400  
+
+        opportunity = Opportunity.query.get(opportunity_id)
+
+        if not opportunity:
+            return jsonify({
+                'message': 'Opportunity does not exist'
+            }), 400  
+
+        new_carpool = Carpool(
+            opportunity_id=data.get('opportunity_id')
+        )
+        
+        db.session.add(new_carpool)
+        db.session.commit()
+        
+        return jsonify(new_carpool.serialize()), 201
+    
+    except Exception as e:
+        db.session.rollback()
+        print("Error in /api/carpool:")
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Failed to create carpool',
+            'error': str(e)
+        }), 500
+
+# Ride endpoints
+@app.route('/api/rides', methods=['POST'])
+@require_auth 
+def create_ride():
+    try:
+        data = request.get_json()
+
+        required_fields = ['carpool_id', 'driver_id']
+        if not all(field in data for field in required_fields):
+            return jsonify({
+                'message': 'Missing required fields',
+                'required': required_fields
+            }), 400
+        
+        user = User.query.get(data['driver_id'])
+
+        if not user:
+            return jsonify({
+                'message': 'User does not exist'
+            })        
+
+        new_ride = Ride(
+            carpool_id=data.get('carpool_id'),
+            driver_id=data.get('driver_id')
+        )
+        
+        db.session.add(new_ride)
+        db.session.commit()
+        
+        return jsonify(new_ride.serialize()), 201
+    
+    except Exception as e:
+        db.session.rollback()
+        print("Error in /api/rides:")
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Failed to create ride',
+            'error': str(e)
+        }), 500
+    
+@app.route('/api/rides/add-rider', methods=['POST'])
+@require_auth
+def add_rider():
+    try:
+        data = request.get_json()
+
+        required_fields=['ride_id', 'user_id', 'pickup_location']
+        if not all(field in data for field in required_fields):
+            return jsonify({
+                'message': 'missing required fields',
+                'required': required_fields
+            }), 400
+        
+        user = User.query.get(data['user_id'])
+        ride = Ride.query.get(data['ride_id'])
+        if not user or ride:
+            return jsonify({
+                'message': 'Rider or user does not exist'
+            })
+        
+        new_ride_rider = RideRider(
+            ride_id=ride.id,
+            user=user.id,
+            pickup_location=data['pickup_location']
+        )
+        db.session.add(new_ride_rider)
+        db.session.commit()
+
+    except Exception as e:
+        db.session.rollback()
+        print("Error in /api/rides/add-rider")
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Failed to add rider',
+            'error': e
+        }), 500
+
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 8000))
