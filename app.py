@@ -2627,7 +2627,7 @@ def org_service_data_csv():
     for row in rows:
         user_orgs = user_org_map.get(row.user_id, [])
         for (week_start, week_end) in week_bins:
-            if week_start <= row.date <= week_end:
+            if week_start <= row.date.date() <= week_end:
                 week_label = f"{week_start:%b %d}–{week_end:%b %d}"
                 for org_id, org_name in user_orgs:
                     table.setdefault((org_id, org_name), {}).setdefault(week_label, 0)
