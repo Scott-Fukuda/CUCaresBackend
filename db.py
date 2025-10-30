@@ -82,6 +82,7 @@ class User(db.Model):
     car_seats = db.Column(db.Integer, nullable=False, default=0)
     bio = db.Column(db.String, nullable=True)
     registration_date = db.Column(DateTime, nullable=False, default=datetime.datetime.utcnow) 
+    carpool_waiver_signed = db.Column(db.Boolean, default=False)
 
     organizations = db.relationship(
         "Organization", 
@@ -113,6 +114,8 @@ class User(db.Model):
         cascade="all, delete-orphan"
     )
 
+    waiver = db.relationship("Waiver", back_populates="user")
+
     def __init__(self, **kwargs):
         self.profile_image = kwargs.get("profile_image")
         self.name = kwargs.get("name")
@@ -129,6 +132,7 @@ class User(db.Model):
         self.car_seats = kwargs.get("car_seats", 0)
         self.bio = kwargs.get("bio", None)
         self.registration_date = kwargs.get("registration_date", datetime.datetime.utcnow())
+        self.carpool_waiver_signed = kwargs.get("carpool_waiver_signed", False)
 
     def serialize(self):
         return {
@@ -148,6 +152,7 @@ class User(db.Model):
             "car_seats": self.car_seats,
             "bio": self.bio,
             "registration_date": self.registration_date,
+            "carpool_waiver_signed": self.carpool_waiver_signed,
             "organizations": [l.serialize() for l in self.organizations],
             "opportunities_hosted": [{"name": l.name} for l in self.opportunities_hosted], 
             "opportunities_involved": [
@@ -217,6 +222,8 @@ class Organization(db.Model):
         "Opportunity",
         back_populates="host_org"
     )
+
+    waiver = db.relationship("Waiver", back_populates="organization")
 
     host_user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     def __init__(self, **kwargs):
@@ -347,4 +354,34 @@ class Opportunity(db.Model):
                 }
                 for uo in self.user_opportunities
             ],
+        }
+    
+class Waiver(db.Model):
+    __tablename__ = "waiver"
+
+    id = db.Column(db.Integer, primary_key=True)
+    typed_name = db.Column(db.String, nullable=False)
+    signed_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, nullable=False)
+    type = db.Column(db.String, nullable=False)
+    content = db.Column(db.String, nullable=False)
+    ip_address = db.Column(db.String, nullable=False)
+    checked_consent = db.Column(db.Boolean, nullable=False)
+
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    organization_id = db.Column(db.Integer, db.ForeignKey("organization.id"), nullable=True)
+
+    user = db.relationship("User", back_populates="waiver")
+    organization = db.relationship("Organization", back_populates="waiver")
+
+    def serialize(self): 
+        return {
+            "id": self.id,
+            "typed_name": self.typed_name,
+            "signed_at": self.signed_at,
+            "type": self.type,
+            "content": self.content,
+            "ip_address": self.ip_address,
+            "checked_consent": self.checked_consent,
+            "user_id": self.user_id,
+            "organization_id": self.organization_id
         }
