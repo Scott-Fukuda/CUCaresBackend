@@ -1,7 +1,7 @@
 import json
 import os
 import uuid
-from flask import Flask, request, jsonify, send_from_directory, make_response
+from flask import Flask, request, jsonify, send_from_directory, make_response, session
 from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail, Waiver
 
 from datetime import datetime, timedelta, timezone
@@ -17,16 +17,19 @@ import redis
 from celery import Celery
 from functools import wraps
 import traceback
+from config import StagingConfig
 
 # define db filename
 db_filename = "cucares.db"
-app = Flask(__name__)
+app = Flask(__name__, static_folder='build', static_url_path='')
 
 # File upload configuration
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 # Load environment variables from .env file
 load_dotenv()
+
+app.secret_key = os.environ["FLASK_SECRET_KEY"]
 
 # S3 configuration (with fallback for development)
 try:
@@ -90,6 +93,10 @@ try:
 except Exception as e:
     print(f"Warning: Firebase Admin SDK initialization failed: {e}")
     print("Firebase authentication endpoints will not work")
+
+env = os.environ.get("FLASK_ENV", "development")
+if env == "staging":
+    app.config.from_object(StagingConfig)
 
 # setup config
 database_url = os.environ.get('DATABASE_URL', f"sqlite:///{db_filename}")
@@ -253,6 +260,33 @@ def verify_firebase_token(token):
             'success': False,
             'error': str(e)
         }
+    
+# ROUTES
+@app.route('/api/hi')
+def hello():
+    return {"message": "Hello from flask :)"}
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_react(path):
+    # If the request matches a static file, serve it
+    file_path = os.path.join(app.static_folder, path)
+    if path != "" and os.path.exists(file_path):
+        return send_from_directory(app.static_folder, path)
+    # Otherwise, serve index.html for React Router
+    return send_from_directory(app.static_folder, 'index.html')
+
+# Staging Endpoints
+if env == "staging":
+    @app.route("/api/login-test/<int:user_id>")
+    def login_test(user_id):
+        user = User.query.get(user_id)
+        if user: 
+            session["user_id"] = user.id
+            print(f"Logged in test user {user.name}")
+            return jsonify(user.serialize()), 200
+        print("User not found")
+        return "User not found", 404
 
 # Special Endpoints
 @app.route('/api/register-opp', methods=['POST'])
