@@ -1,7 +1,7 @@
 import json
 import os
 import uuid
-from flask import Flask, request, jsonify, send_from_directory, make_response
+from flask import Flask, request, jsonify, send_from_directory, make_response, session
 from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail
 from sqlalchemy import select
 
@@ -56,9 +56,13 @@ except Exception as e:
     print(f"Warning: S3 client initialization failed: {e}")
     print("S3 functionality will be disabled.")
 
-# restrict API access to requests from secure origin
-CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us", "http://localhost:5173", "http://localhost:5173", "https://cu-cares-frontend-3b8drq5cp-scotts-projects-851bba1b.vercel.app"], supports_credentials=True)
+env = os.environ.get("FLASK_ENV", "development")
 
+# restrict API access to requests from secure origin
+if env == "staging":
+    CORS(app, origins=["http://localhost:5173"], supports_credentials=True)
+else: 
+    CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us"], supports_credentials=True)
 
 # Initialize Firebase Admin SDK
 try:
@@ -96,7 +100,6 @@ except Exception as e:
     print(f"Warning: Firebase Admin SDK initialization failed: {e}")
     print("Firebase authentication endpoints will not work")
 
-env = os.environ.get("FLASK_ENV", "development")
 if env == "staging":
     app.config.from_object(StagingConfig)
 
