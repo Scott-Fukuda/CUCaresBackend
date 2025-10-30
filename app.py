@@ -17,16 +17,21 @@ import random
 import redis
 from celery import Celery
 import csv, io
+from functools import wraps
+import traceback
+from config import StagingConfig
 
 # define db filename
 db_filename = "cucares.db"
-app = Flask(__name__)
+app = Flask(__name__, static_folder='build', static_url_path='')
 
 # File upload configuration
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 # Load environment variables from .env file
 load_dotenv()
+
+app.secret_key = os.environ["FLASK_SECRET_KEY"]
 
 # S3 configuration (with fallback for development)
 try:
@@ -52,7 +57,7 @@ except Exception as e:
     print("S3 functionality will be disabled.")
 
 # restrict API access to requests from secure origin
-CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us", "http://localhost:5173"])
+CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us", "http://localhost:5173", "http://localhost:5173"], supports_credentials=True)
 
 
 # Initialize Firebase Admin SDK
@@ -91,6 +96,10 @@ except Exception as e:
     print(f"Warning: Firebase Admin SDK initialization failed: {e}")
     print("Firebase authentication endpoints will not work")
 
+env = os.environ.get("FLASK_ENV", "development")
+if env == "staging":
+    app.config.from_object(StagingConfig)
+
 # setup config
 database_url = os.environ.get('DATABASE_URL', f"sqlite:///{db_filename}")
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
@@ -125,7 +134,10 @@ def paginate(query, page=1, per_page=20):
 # Authentication middleware function
 def require_auth(f):
     """Decorator to require Firebase authentication for endpoints"""
+    @wraps(f)
     def decorated_function(*args, **kwargs):
+        if request.method == "OPTIONS":
+            return '', 200
         try:
             # Get the Authorization header
             auth_header = request.headers.get('Authorization')
@@ -250,6 +262,33 @@ def verify_firebase_token(token):
             'success': False,
             'error': str(e)
         }
+    
+# ROUTES
+@app.route('/api/hi')
+def hello():
+    return {"message": "Hello from flask :)"}
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_react(path):
+    # If the request matches a static file, serve it
+    file_path = os.path.join(app.static_folder, path)
+    if path != "" and os.path.exists(file_path):
+        return send_from_directory(app.static_folder, path)
+    # Otherwise, serve index.html for React Router
+    return send_from_directory(app.static_folder, 'index.html')
+
+# Staging Endpoints
+if env == "staging":
+    @app.route("/api/login-test/<int:user_id>")
+    def login_test(user_id):
+        user = User.query.get(user_id)
+        if user: 
+            session["user_id"] = user.id
+            print(f"Logged in test user {user.name}")
+            return jsonify(user.serialize()), 200
+        print("User not found")
+        return "User not found", 404
 
 # Special Endpoints
 @app.route('/api/register-opp', methods=['POST'])
@@ -630,6 +669,7 @@ def get_user(user_id):
     """Get a single user"""
     try:
         user = User.query.get_or_404(user_id)
+        print('user', user.serialize())
         return jsonify(user.serialize())
     
     except Exception as e:
@@ -2490,6 +2530,55 @@ def get_opps_csv():
     except Exception as e:
         return jsonify({'error': 'Failed to generate opportunities CSV', 'message': str(e)}), 500
 
+# Waiver endpoints
+@app.route('/api/waivers/create-waiver', methods=['POST', 'OPTIONS'])
+@require_auth
+def create_waiver():
+    """Create a new waiver"""
+    try:
+        data = request.get_json()
+        
+        required_fields = ['typed_name', 'type', 'content', 'checked_consent', 'user_id']
+        if not all(field in data for field in required_fields):
+            return jsonify({
+                'message': 'Missing required fields',
+                'required': required_fields
+            }), 400
+        
+        user = User.query.get(data['user_id'])
+
+        if not user:
+            return jsonify({
+                'message': 'User does not exist'
+            })        
+        
+        ip = request.remote_addr
+
+        new_waiver = Waiver(
+            typed_name=data.get('typed_name'),
+            type=data.get('type'),
+            content=data.get('content'),
+            checked_consent=data.get('checked_consent'),
+            ip_address=ip,
+            user_id=data.get('user_id'),
+            organization_id=data.get('organization_id')
+        )
+        
+        db.session.add(new_waiver)
+        user.carpool_waiver_signed = True
+        db.session.commit()
+        
+        return jsonify(new_waiver.serialize()), 201
+    
+    except Exception as e:
+        db.session.rollback()
+        print("Error in /api/waivers/create-waiver:")
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Failed to create waiver',
+            'error': str(e)
+        }), 500
+    
 # SERVICE JOURNAL ENDPOINTS
 @app.route('/api/service-journal/opps/<int:user_id>', methods=['GET'])
 @require_auth

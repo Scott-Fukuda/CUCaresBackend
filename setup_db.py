@@ -4,7 +4,7 @@ Database setup script for PostgreSQL migration (psycopg3)
 """
 import os
 from app import app, db
-from db import User, Organization, Opportunity, UserOpportunity, Friendship
+from db import User, Organization, Opportunity, UserOpportunity, Friendship, Waiver
 
 def setup_database():
     """Initialize the database and create tables"""
