@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+    db:
+        image: postgres:15
+        container_name: cucares_staging_db
+        environment:
+            POSTGRES_USER: staging_user
+            POSTGRES_PASSWORD: staging_pass
+            POSTGRES_DB: cucares_staging
+        ports:
+            - "5433:5432"
+        volumes:
+            - ./staging_data:/docker-entrypoint-initdb.d
