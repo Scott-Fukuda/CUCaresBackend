@@ -2491,6 +2491,7 @@ def get_opps_csv():
             'actual_runtime',
             'total_slots',
             'total_attended',
+            'total_registered',
             'address',
             'date',
             'num_comments',
@@ -2504,6 +2505,7 @@ def get_opps_csv():
             actual_runtime = opp.actual_runtime if opp.actual_runtime is not None else ''
             total_slots = opp.total_slots if opp.total_slots is not None else ''
             total_attended = sum(1 for uo in (opp.user_opportunities or []) if getattr(uo, 'attended', False))
+            total_registered = sum(1 for uo in (opp.user_opportunities or []) if getattr(uo, 'registered', False))
             address = opp.address or ''
             date = opp.date.isoformat() if getattr(opp, 'date', None) else ''
             num_comments = len(opp.comments or [])
@@ -2516,6 +2518,7 @@ def get_opps_csv():
                 actual_runtime,
                 total_slots,
                 total_attended,
+                total_registered,
                 address,
                 date,
                 num_comments,
