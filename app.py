@@ -56,15 +56,15 @@ except Exception as e:
     print(f"Warning: S3 client initialization failed: {e}")
     print("S3 functionality will be disabled.")
 
-env = os.environ.get("MY_ENV", "production")
+env = os.environ.get("FLASK_ENV", "production")
 
 # restrict API access to requests from secure origin
-# if env == "staging":
-#     CORS(app, origins=["http://localhost:5173"], supports_credentials=True)
-# else: 
-#     CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us"], supports_credentials=True)
+if env == "staging":
+    CORS(app, origins=["http://localhost:5173", "https://campuscares.us", "https://www.campuscares.us"], supports_credentials=True)
+else: 
+    CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us"], supports_credentials=True)
 
-CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us", "http://localhost:5173"], supports_credentials=True)
+# CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us", "http://localhost:5173"], supports_credentials=True)
 
 # Initialize Firebase Admin SDK
 try:
