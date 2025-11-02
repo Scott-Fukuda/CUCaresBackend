@@ -1,7 +1,7 @@
 """create tables for staging
 
 Revision ID: 3267b50fa1d8
-Revises: 4c3fab48e1d5
+Revises: None
 Create Date: 2025-10-30 10:28:33.285333
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '3267b50fa1d8'
-down_revision = '4c3fab48e1d5'
+down_revision = None
 branch_labels = None
 depends_on = None
 
