@@ -2,7 +2,7 @@ import json
 import os
 import uuid
 from flask import Flask, request, jsonify, send_from_directory, make_response, session
-from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail
+from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail, MultiOpportunity
 from sqlalchemy import select
 
 from datetime import datetime, timedelta, timezone
@@ -1079,6 +1079,8 @@ def create_opportunity():
             approved = True
         else:
             approved = False
+
+        print( data.get('multiopp_id', None))
             
         # Create new opportunity
         new_opportunity = Opportunity(
@@ -1102,9 +1104,10 @@ def create_opportunity():
             attendance_marked=data.get('attendance_marked', False),
             redirect_url=data.get('redirect_url', None),
             actual_runtime=data.get('actual_runtime', None),
-            approved=approved
+            approved=approved,
+            multiopp_id=data.get('multiopp_id', None),
+            multiopp=data.get('multiopp', None)
         )
-        
         db.session.add(new_opportunity)
         db.session.commit()
 
@@ -2753,6 +2756,181 @@ def org_service_data_csv():
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
+
+
+def generate_opportunities_from_multiopp(multiopp: MultiOpportunity, data: dict):
+    """Generate individual opportunities from a MultiOpportunity recurrence pattern."""
+    from datetime import datetime, timedelta
+    import pytz
+
+    all_opps = []
+    start_date = multiopp.start_date
+
+    eastern = pytz.timezone("US/Eastern")
+
+    # Flatten day/time mapping list into (weekday, [(time_str, duration), ...]) pairs
+    day_time_pairs = []
+    for entry in multiopp.days_of_week:
+        for weekday, time_list in entry.items():
+            day_time_pairs.append((weekday, time_list))
+
+    total_weeks = multiopp.week_recurrences or 4
+    week_frequency = multiopp.week_frequency or 1
+
+    for week_index in range(total_weeks):
+        # Handle every Nth week (e.g., every 2 weeks)
+        if week_frequency > 1 and week_index % week_frequency != 0:
+            continue
+
+        base_week_start = start_date + timedelta(weeks=week_index)
+
+        for weekday_name, time_list in day_time_pairs:
+            weekday_index = [
+                "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
+            ].index(weekday_name)
+            day_date = base_week_start + timedelta(days=(weekday_index - base_week_start.weekday()) % 7)
+
+            for time_entry in time_list:
+                # Each entry is a tuple or list: (start_time_str, duration)
+                if isinstance(time_entry, (list, tuple)) and len(time_entry) == 2:
+                    start_time_str, duration = time_entry
+                else:
+                    start_time_str, duration = time_entry, 60
+
+                # Parse "HH:MM" or ISO "T" time
+                start_time = (
+                    datetime.fromisoformat(start_time_str).time()
+                    if "T" in start_time_str
+                    else datetime.strptime(start_time_str, "%H:%M").time()
+                )
+
+                # Combine with date (naive datetime)
+                naive_dt = datetime.combine(day_date.date(), start_time)
+
+                # ✅ Localize to Eastern time, then convert to UTC for DB storage
+                localized_dt = eastern.localize(naive_dt)
+                dt_utc = localized_dt.astimezone(pytz.utc)
+
+                opp = Opportunity(
+                    name=data["name"],
+                    description=data.get("description"),
+                    causes=data.get("causes", []),
+                    tags=data.get("tags", []),
+                    address=data["address"],
+                    nonprofit=data.get("nonprofit"),
+                    image=data.get("image"),
+                    approved=data.get("approved", False),
+                    host_org_name=data.get("host_org_name"),
+                    qualifications=data.get("qualifications", []),
+                    visibility=data.get("visibility", []),
+                    host_org_id=data.get("host_org_id"),
+                    host_user_id=data.get("host_user_id"),
+                    redirect_url=data.get("redirect_url"),
+                    total_slots=data.get("total_slots"),
+
+                    # Recurrence-specific fields
+                    date=dt_utc,  # store in UTC
+                    duration=duration,
+                    recurring="recurring",
+                    comments=[],
+                    attendance_marked=False,
+                    actual_runtime=None,
+
+                    # Relationship
+                    multiopp_id=multiopp.id,
+                    multi_opportunity=multiopp,
+                )
+
+                db.session.add(opp)
+                all_opps.append(opp)
+
+    db.session.commit()
+    return all_opps
+
+
+
+@app.route("/api/multiopps", methods=["POST"])
+@require_auth
+def create_multiopp():
+    if request.is_json:
+        data = request.get_json()
+    else:
+        data = request.form.to_dict()
+        # Parse JSON-like fields manually
+        if "days_of_week" in data:
+            data["days_of_week"] = json.loads(data["days_of_week"])
+        if "week_frequency" in data:
+            data["week_frequency"] = int(data["week_frequency"])
+        if "week_recurrences" in data:
+            data["week_recurrences"] = int(data["week_recurrences"])
+        if "approved" in data:
+            data["approved"] = data["approved"].lower() == "true"
+
+
+    # Step 1: Create MultiOpportunity (recurrence definition)
+    multiopp = MultiOpportunity(
+        name=data["name"],
+        description=data.get("description"),
+        causes=data.get("causes", []),
+        tags=data.get("tags", []),
+        address=data["address"],
+        nonprofit=data.get("nonprofit"),
+        image=data.get("image"),
+        approved=data.get("approved", False),
+        host_org_name=data.get("host_org_name"),
+        qualifications=data.get("qualifications", []),
+        visibility=data.get("visibility", []),
+        host_org_id=data.get("host_org_id"),
+        host_user_id=data.get("host_user_id"),
+        redirect_url=data.get("redirect_url"),
+        total_slots=data.get("total_slots"),
+
+        start_date=datetime.fromisoformat(data["start_date"]),
+        days_of_week=data["days_of_week"],
+        week_frequency=data.get("week_frequency"),
+        week_recurrences=data.get("week_recurrences", 4)
+    )
+
+    db.session.add(multiopp)
+    db.session.commit()
+
+    # Step 2: Generate the actual individual Opportunities
+    generated_opps = generate_opportunities_from_multiopp(multiopp, data)
+
+    # Step 3: Return serialized MultiOpportunity and its generated Opportunities
+    return jsonify({
+        "multiopp": multiopp.serialize(),
+        "generated_opportunities": [opp.serialize() for opp in generated_opps]
+    }), 201
+
+# 🟡 GET ALL multiopps
+@app.route("/api/multiopps", methods=["GET"])
+@require_auth
+def get_all_multiopps():
+    multiopps = MultiOpportunity.query.all()
+    return jsonify([m.serialize() for m in multiopps]), 200
+
+
+# 🟢 GET SINGLE multiopp by ID
+@app.route("/api/multiopps/<int:multiopp_id>", methods=["GET"])
+@require_auth
+def get_multiopp(multiopp_id):
+    multiopp = MultiOpportunity.query.get_or_404(multiopp_id)
+    return jsonify(multiopp.serialize()), 200
+
+
+# 🔴 DELETE multiopp by ID
+@app.route("/api/multiopps/<int:multiopp_id>", methods=["DELETE"])
+@require_auth
+def delete_multiopp(multiopp_id):
+    multiopp = MultiOpportunity.query.get_or_404(multiopp_id)
+
+    # Optional: Delete all linked individual opportunities first, if cascade isn’t set up
+   
+
+    db.session.delete(multiopp)
+    db.session.commit()
+    return jsonify({"message": f"MultiOpportunity {multiopp_id} deleted successfully."})
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 8000))
