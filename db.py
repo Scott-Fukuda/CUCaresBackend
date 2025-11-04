@@ -84,6 +84,8 @@ class User(db.Model):
     registration_date = db.Column(DateTime, nullable=False, default=datetime.datetime.utcnow) 
     carpool_waiver_signed = db.Column(db.Boolean, default=False)
 
+    multiopps_hosted = db.relationship("MultiOpportunity", back_populates="host_user")
+
     organizations = db.relationship(
         "Organization", 
         secondary=user_organization, 
@@ -133,6 +135,8 @@ class User(db.Model):
         self.bio = kwargs.get("bio", None)
         self.registration_date = kwargs.get("registration_date", datetime.datetime.utcnow())
         self.carpool_waiver_signed = kwargs.get("carpool_waiver_signed", False)
+        self.multiopps_hosted = kwargs.get("multiopps_hosted", [])
+
 
     def serialize(self):
         return {
@@ -211,6 +215,7 @@ class Organization(db.Model):
     type = db.Column(db.String, nullable=False)
     approved = db.Column(db.Boolean, default=False)
     date_created = db.Column(db.String, nullable=True, default="")
+    multiopps_hosted = db.relationship("MultiOpportunity", back_populates="host_org")
 
     users = db.relationship(
         "User", 
@@ -235,6 +240,7 @@ class Organization(db.Model):
         self.host_user_id = kwargs.get("host_user_id")
         self.approved = kwargs.get("approved", False)
         self.date_created = kwargs.get("date_created", "")
+        self.multiopps_hosted = kwargs.get("multiopps_hosted", [])
 
     def serialize(self):
         return {
@@ -293,6 +299,8 @@ class Opportunity(db.Model):
     user_opportunities = db.relationship('UserOpportunity', back_populates='opportunity', cascade="all", passive_deletes=True)
     
 
+    multiopp_id = db.Column(db.Integer, db.ForeignKey("multi_opportunity.id"), nullable=True)
+    multi_opportunity = db.relationship("MultiOpportunity", back_populates="opportunities")
 
     def __init__(self, **kwargs):
         self.name = kwargs.get("name")
@@ -316,6 +324,8 @@ class Opportunity(db.Model):
         self.attendance_marked = kwargs.get("attendance_marked", False)
         self.redirect_url = kwargs.get("redirect_url", None)
         self.actual_runtime = kwargs.get("actual_runtime", None)
+        self.multiopp_id = kwargs.get("multiopp_id", None)
+        self.multi_opportunity = kwargs.get("multi_opportunity", None)
 
     def serialize(self):
         return {
@@ -341,6 +351,19 @@ class Opportunity(db.Model):
             "attendance_marked": self.attendance_marked,
             "redirect_url": self.redirect_url,
             "actual_runtime": self.actual_runtime,
+            "multiopp_id": self.multiopp_id,
+            "multiopp": (
+                {
+                    "id": self.multi_opportunity.id,
+                    "name": self.multi_opportunity.name,
+                    "start_date": self.multi_opportunity.start_date.isoformat() if self.multi_opportunity.start_date else None,
+                    "days_of_week": self.multi_opportunity.days_of_week,
+                    "week_frequency": self.multi_opportunity.week_frequency,
+                    "week_recurrences": self.multi_opportunity.week_recurrences,
+                    "created_at": self.multi_opportunity.created_at.isoformat() if self.multi_opportunity.created_at else None
+                }
+                if self.multi_opportunity else None
+            ),
             "involved_users": [
                 {
                     "user": uo.user.name,
@@ -353,7 +376,7 @@ class Opportunity(db.Model):
                     "profile_image": uo.user.profile_image,
                 }
                 for uo in self.user_opportunities
-            ],
+            ]
         }
     
 class Waiver(db.Model):
@@ -385,3 +408,80 @@ class Waiver(db.Model):
             "user_id": self.user_id,
             "organization_id": self.organization_id
         }
+
+
+class MultiOpportunity(db.Model):
+    __tablename__ = "multi_opportunity"
+    # used for multiopp itself
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String, nullable=False)
+    description = db.Column(db.String, nullable=True)
+    causes = db.Column(db.JSON, nullable=True, default=list)
+    tags = db.Column(db.JSON, nullable=True, default=list)
+    address = db.Column(db.String, nullable=False)
+    nonprofit = db.Column(db.String, nullable=True)
+    image = db.Column(db.String, nullable=True)
+    approved = db.Column(db.Boolean, default=False, nullable=False)
+    host_org_name = db.Column(db.String, nullable=True)
+    qualifications = db.Column(db.JSON, nullable=True, default=list)
+    visibility = db.Column(db.JSON, nullable=True, default=list)
+    host_org_id = db.Column(db.Integer, db.ForeignKey("organization.id"))
+    host_org = db.relationship("Organization", back_populates="multiopps_hosted")
+    host_user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    host_user = db.relationship("User", back_populates="multiopps_hosted")
+
+    # used to pass down to opportunities
+    redirect_url = db.Column(db.String, nullable=True, default=None)
+    total_slots = db.Column(db.Integer, nullable=True)
+    # this is all from opportunity except for comments, recurring, attendance_marked, actual_runtime
+
+
+    # these are the ones that vary by each opportunity (used for default values)
+    # - date, duration, comments, attendance_marked, user_opportunities, actual_runtime
+
+    # non-editable for each opportunity
+    # - name, description, causes, tags, address, nonprofit, host_org_name, qualifications, visibility, host_org_id, host_org, host_user_id, host_user
+    
+    # recurrence definition
+    start_date = db.Column(db.DateTime, nullable=False)
+    days_of_week = db.Column(db.JSON, nullable=False, default=list)
+    week_frequency = db.Column(db.Integer, nullable=True)
+    week_recurrences = db.Column(db.Integer, nullable=True, default=4)
+    address = db.Column(db.String, nullable=False)
+    nonprofit = db.Column(db.String, nullable=True)
+
+
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    opportunities = db.relationship(
+        "Opportunity", back_populates="multi_opportunity", cascade="all"
+    )
+
+    def serialize(self):
+        return {
+           
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "causes": self.causes,
+            "tags": self.tags,
+            "address": self.address,
+            "nonprofit": self.nonprofit,
+            "image": self.image,
+            "approved": self.approved,
+            "host_org_name": self.host_org_name,
+            "qualifications": self.qualifications,
+            "visibility": self.visibility,
+            "host_org_id": self.host_org_id,
+            "host_user_id": self.host_user_id,
+            "start_date": self.start_date.isoformat() if self.start_date else None,
+            "days_of_week": self.days_of_week,
+            "week_frequency": self.week_frequency,
+            "week_recurrences": self.week_recurrences,
+
+            "opportunities": [{"id": opp.id,
+                               "date":opp.date,
+                                "duration":opp.duration }
+                for opp in self.opportunities]
+                if hasattr(self, "opportunities") else [],
+    }
