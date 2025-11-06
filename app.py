@@ -2948,11 +2948,6 @@ def update_multiopp_visibility(multiopp_id):
     if not multiopp:
         return jsonify({"error": "MultiOpportunity not found."}), 404
 
-    # Optional: Auth check — ensure only host user or admin can change visibility
-    user_id = g.user.get("uid")  # depends on how you store Firebase user info
-    if not user_id or (multiopp.host_user_id != user_id):
-        return jsonify({"error": "Unauthorized to modify this opportunity."}), 403
-
     # Update visibility
     try:
         if isinstance(data["visibility"], str):
