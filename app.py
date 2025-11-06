@@ -726,6 +726,9 @@ def get_users_light():
                 User.name,
                 User.profile_image,
                 User.email,
+                User.bio,
+                User.car_seats,
+                User.admin,
                 User.phone,
                 User.points
             ),
@@ -739,7 +742,10 @@ def get_users_light():
             "id": u.id,
             "name": u.name,
             "profile_image": u.profile_image,
+            "bio": u.bio,
+            "admin": u.admin,
             "email": u.email,
+            "car_seats": u.car_seats,
             "phone": u.phone,
             "organizationIds": [org.id for org in (u.organizations or [])],
             "points": u.points or 0,
@@ -1198,37 +1204,43 @@ def get_opportunities():
 @app.route('/api/opps/current', methods=['GET'])
 @require_auth
 def get_current_opportunities():
-    """Get current opportunities (whose start dates haven't passed) with pagination"""
+    """Get current opportunities (whose dates are not older than yesterday) with pagination"""
     try:
         page = int(request.args.get('page', 1))
         per_page = int(request.args.get('per_page', 10000))
-        
-        # Get current datetime
+
+        # Current UTC datetime
         current_datetime = datetime.utcnow()
-        
-        # Filter opportunities where date is in the future
-        current_opportunities = Opportunity.query.filter(
-            Opportunity.date > current_datetime
-        ).order_by(Opportunity.date.asc())  # Order by date ascending (earliest first)
-        
+
+        # Leeway: allow opportunities from up to 1 day ago
+        leeway_start = current_datetime - timedelta(days=1)
+
+        # Filter: include all opps whose date >= (yesterday at this time)
+        current_opportunities = (
+            Opportunity.query
+            .filter(Opportunity.date >= leeway_start)
+            .order_by(Opportunity.date.asc())
+        )
+
         paginated_opps = paginate(current_opportunities, page, per_page)
-        
+
         return jsonify({
-            'opportunities': [opp.serialize() for opp in paginated_opps.items],
-            'pagination': {
-                'page': paginated_opps.page,
-                'per_page': paginated_opps.per_page,
-                'total': paginated_opps.total
+            "opportunities": [opp.serialize() for opp in paginated_opps.items],
+            "pagination": {
+                "page": paginated_opps.page,
+                "per_page": paginated_opps.per_page,
+                "total": paginated_opps.total,
             },
-            'current_datetime': current_datetime.isoformat()
+            "current_datetime": current_datetime.isoformat(),
+            "leeway_start": leeway_start.isoformat()
         })
-    
+
     except Exception as e:
         return jsonify({
-            'message': 'Failed to fetch current opportunities',
-            'error': str(e)
+            "message": "Failed to fetch current opportunities",
+            "error": str(e)
         }), 500
-
+    
 @app.route('/api/opps/approved', methods=['GET'])
 @require_auth
 def get_approved_opportunities():
