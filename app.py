@@ -2865,6 +2865,8 @@ def create_multiopp():
             data["week_recurrences"] = int(data["week_recurrences"])
         if "approved" in data:
             data["approved"] = data["approved"].lower() == "true"
+        if "visibility" in data:
+            data["visibility"] = json.loads(request.form["visibility"])
 
 
     # Step 1: Create MultiOpportunity (recurrence definition)
