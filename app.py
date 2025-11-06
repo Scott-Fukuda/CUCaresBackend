@@ -121,15 +121,16 @@ db.init_app(app)
 migrate = Migrate(app, db)
 
 # with app.app_context():
-    # For app migrations don't create all tables
-    # db.create_all()
+#     # For app migrations don't create all tables
+#     # db.create_all()
 
-    # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
-    # User.__table__.drop(db.engine)
-    # Opportunity.__table__.drop(db.engine)
-    # Organization.__table__.drop(db.engine)
-    # UserOpportunity.__table__.drop(db.engine)
-    # Friendship.__table__.drop(db.engine)
+#     # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
+#     User.__table__.drop(db.engine)
+#     Opportunity.__table__.drop(db.engine)
+#     Organization.__table__.drop(db.engine)
+#     UserOpportunity.__table__.drop(db.engine)
+#     Friendship.__table__.drop(db.engine)
+#     MultiOpportunity.__table__.drop(db.engine)
 
 
 # Helper function to handle pagination
@@ -2933,6 +2934,38 @@ def delete_multiopp(multiopp_id):
     db.session.delete(multiopp)
     db.session.commit()
     return jsonify({"message": f"MultiOpportunity {multiopp_id} deleted successfully."})
+
+@app.route("/api/multiopps/<int:multiopp_id>/visibility", methods=["PATCH"])
+@require_auth
+def update_multiopp_visibility(multiopp_id):
+    """Update only the visibility field of a MultiOpportunity."""
+    data = request.get_json(force=True, silent=True)
+
+    if not data or "visibility" not in data:
+        return jsonify({"error": "Missing 'visibility' field in request body."}), 400
+
+    multiopp = MultiOpportunity.query.get(multiopp_id)
+    if not multiopp:
+        return jsonify({"error": "MultiOpportunity not found."}), 404
+
+    # Optional: Auth check — ensure only host user or admin can change visibility
+    user_id = g.user.get("uid")  # depends on how you store Firebase user info
+    if not user_id or (multiopp.host_user_id != user_id):
+        return jsonify({"error": "Unauthorized to modify this opportunity."}), 403
+
+    # Update visibility
+    try:
+        if isinstance(data["visibility"], str):
+            multiopp.visibility = json.loads(data["visibility"])
+        else:
+            multiopp.visibility = data["visibility"]
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid format for 'visibility'. Must be JSON array or object."}), 400
+
+    db.session.commit()
+
+    return jsonify({"multiopp": multiopp.serialize()}), 200
+
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 8000))
