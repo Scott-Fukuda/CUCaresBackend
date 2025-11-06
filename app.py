@@ -712,7 +712,37 @@ def check_user_exists(email):
             'message': 'Failed to fetch user by email',
             'error': str(e)
         }), 500
-    
+
+@app.route('/api/users/minimal', methods=['GET'])
+@require_auth
+def get_users_light():
+    # Select only the columns we care about
+    users = (
+        db.session.query(
+            User.id,
+            User.name,
+            User.profile_image,
+            User.email,
+            User.phone,
+            User.organizationIds,
+            User.points,
+        ).all()
+    )
+
+    result = [
+        {
+            "id": u.id,
+            "name": u.name,
+            "profile_image": u.profile_image,
+            "email": u.email,
+            "phone": u.phone,
+            "organizationIds": u.organizationIds or [],
+            "points": u.points or 0,
+        }
+        for u in users
+    ]
+    return jsonify(result)
+
 @app.route('/api/users/email/<email>', methods=['GET'])
 @require_auth
 def get_user_by_email(email):
