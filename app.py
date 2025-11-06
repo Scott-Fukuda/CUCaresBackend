@@ -2935,7 +2935,7 @@ def delete_multiopp(multiopp_id):
     db.session.commit()
     return jsonify({"message": f"MultiOpportunity {multiopp_id} deleted successfully."})
 
-@app.route("/api/multiopps/<int:multiopp_id>/visibility", methods=["PATCH"])
+@app.route("/api/multiopps/<int:multiopp_id>/visibility", methods=["PUT"])
 @require_auth
 def update_multiopp_visibility(multiopp_id):
     """Update only the visibility field of a MultiOpportunity."""
