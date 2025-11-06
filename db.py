@@ -479,9 +479,23 @@ class MultiOpportunity(db.Model):
             "week_frequency": self.week_frequency,
             "week_recurrences": self.week_recurrences,
 
-            "opportunities": [{"id": opp.id,
-                               "date":opp.date,
-                                "duration":opp.duration }
-                for opp in self.opportunities]
-                if hasattr(self, "opportunities") else [],
+            "opportunities": [
+                {
+                    "id": opp.id,
+                    "date": opp.date,
+                    "duration": opp.duration,
+                    "involved_users": [
+                        {
+                            "id": uo.user.id,
+                            "name": uo.user.name,
+                            "profile_image": uo.user.profile_image,
+                        }
+                        for uo in getattr(opp, "user_opportunities", []) or []
+                        if getattr(uo, "user", None)  # ensure no null user
+                    ],
+                }
+                for opp in getattr(self, "opportunities", []) or []
+            ],
+
+                
     }
