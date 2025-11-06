@@ -713,10 +713,11 @@ def check_user_exists(email):
             'error': str(e)
         }), 500
 
+
 @app.route('/api/users/minimal', methods=['GET'])
 @require_auth
 def get_users_light():
-    # Query full User objects, but defer unnecessary heavy fields
+    # Query only light user info and org IDs efficiently
     users = (
         db.session.query(User)
         .options(
@@ -728,8 +729,7 @@ def get_users_light():
                 User.phone,
                 User.points
             ),
-            # Load only IDs of related organizations
-            db.joinedload(User.organizations).load_only("id")
+            db.joinedload(User.organizations).load_only(Organization.id)
         )
         .all()
     )
@@ -741,13 +741,14 @@ def get_users_light():
             "profile_image": u.profile_image,
             "email": u.email,
             "phone": u.phone,
-            "organizations": [{"id": org.id} for org in (u.organizations or [])],
+            "organizationIds": [org.id for org in (u.organizations or [])],
             "points": u.points or 0,
         }
         for u in users
     ]
 
     return jsonify({"users": result})
+
 
 
 @app.route('/api/users/email/<email>', methods=['GET'])
