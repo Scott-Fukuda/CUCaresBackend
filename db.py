@@ -116,6 +116,7 @@ class User(db.Model):
 
     waiver = db.relationship("Waiver", back_populates="user")
     ride_riders = db.relationship("RideRider", back_populates="user")
+    car = db.relationship("Car", back_populates="user", uselist=False)
 
     def __init__(self, **kwargs):
         self.profile_image = kwargs.get("profile_image")
@@ -150,7 +151,7 @@ class User(db.Model):
             "academic_level": self.academic_level,
             "major": self.major,
             "birthday": self.birthday,
-            "car_seats": self.car_seats,
+            "car_seats": self.car.seats if self.car else self.car_seats,
             "bio": self.bio,
             "registration_date": self.registration_date,
             "carpool_waiver_signed": self.carpool_waiver_signed,
@@ -410,15 +411,20 @@ class RideRider(db.Model):
     ride_id = db.Column(db.Integer, db.ForeignKey("ride.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     pickup_location = db.Column(db.String, nullable=False)
+    notes = db.Column(db.String, nullable=True)
 
     ride = db.relationship("Ride", back_populates="ride_riders")
     user = db.relationship("User", back_populates="ride_riders")
 
     def serialize(self):
         return {
+            "id": self.id,
             "ride_id": self.ride_id,
             "user_id": self.user_id,
-            "pickup_location": self.pickup_location
+            "profile_image": self.user.profile_image,
+            "name": self.user.name,
+            "pickup_location": self.pickup_location,
+            "notes": self.notes
         }
 
 class Ride(db.Model):
@@ -429,10 +435,35 @@ class Ride(db.Model):
 
     carpool = db.relationship("Carpool", back_populates="rides")
     ride_riders = db.relationship("RideRider", back_populates="ride", cascade="all, delete-orphan")
+    driver = db.relationship("User", foreign_keys=[driver_id])
 
     def serialize(self):
         return {
             "id": self.id,
             "carpool_id": self.carpool_id,
-            "driver_id": self.driver_id
+            "driver_id": self.driver_id,
+            "driver_name": self.driver.name if self.driver else None,
+            "driver_seats": self.driver.car.seats if self.driver and self.driver.car else None,
+            "riders": [rider.serialize() for rider in self.ride_riders]
+        }
+
+class Car(db.Model):
+    __tablename__ = "car"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    color = db.Column(db.String, nullable=True)
+    model = db.Column(db.String, nullable=True)
+    seats = db.Column(db.Integer, nullable=False)
+    license_plate = db.Column(db.String, nullable=True)
+
+    user = db.relationship("User", back_populates="car")
+
+    def serialize(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "color": self.color,
+            "model": self.model,
+            "seats": self.seats,
+            "license_plate": self.license_plate
         }

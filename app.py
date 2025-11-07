@@ -2,7 +2,7 @@ import json
 import os
 import uuid
 from flask import Flask, request, jsonify, send_from_directory, make_response, session
-from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail
+from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail, Ride, RideRider, Car, Carpool, Waiver
 from sqlalchemy import select
 
 from datetime import datetime, timedelta, timezone
@@ -2761,7 +2761,7 @@ def org_service_data_csv():
 
     
 # Carpool endpoints
-@app.route('/api/carpool', methods=['POST'])
+@app.route('/api/carpools', methods=['POST'])
 @require_auth
 def create_carpool():
     try:
@@ -2792,7 +2792,7 @@ def create_carpool():
     
     except Exception as e:
         db.session.rollback()
-        print("Error in /api/carpool:")
+        print("Error in /api/carpools:")
         traceback.print_exc()
         return jsonify({
             'message': 'Failed to create carpool',
@@ -2838,6 +2838,26 @@ def create_ride():
             'message': 'Failed to create ride',
             'error': str(e)
         }), 500
+
+@app.route('/api/rides/<int:carpool_id>', methods=['GET'])
+@require_auth 
+def get_rides(carpool_id):
+    try:
+        carpool = Carpool.query.get(carpool_id)
+        if not carpool:
+            return jsonify({"error": "Carpool not found"}), 404
+        
+        rides = Ride.query.filter_by(carpool_id=carpool_id).all()
+
+        return jsonify({
+            "rides": [ride.serialize() for ride in rides]
+        }), 200
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch rides',
+            'error': str(e)
+        }), 500
     
 @app.route('/api/rides/add-rider', methods=['POST'])
 @require_auth
@@ -2854,18 +2874,20 @@ def add_rider():
         
         user = User.query.get(data['user_id'])
         ride = Ride.query.get(data['ride_id'])
-        if not user or ride:
+        if not user or not ride:
             return jsonify({
                 'message': 'Rider or user does not exist'
             })
         
         new_ride_rider = RideRider(
             ride_id=ride.id,
-            user=user.id,
-            pickup_location=data['pickup_location']
+            user_id=user.id,
+            pickup_location=data['pickup_location'],
+            notes=data['notes']
         )
         db.session.add(new_ride_rider)
         db.session.commit()
+        return jsonify(new_ride_rider.serialize()), 201
 
     except Exception as e:
         db.session.rollback()
@@ -2876,6 +2898,182 @@ def add_rider():
             'error': e
         }), 500
 
+@app.route('/api/rides/remove-rider', methods=['DELETE'])
+@require_auth
+def remove_rider():
+    try:
+        data = request.get_json()
+
+        required_fields = ['ride_id', 'user_id']
+        if not all(field in data for field in required_fields):
+            return jsonify({
+                'message': 'missing required fields',
+                'required': required_fields
+            }), 400
+        
+        user = User.query.get(data['user_id'])
+        ride = Ride.query.get(data['ride_id'])
+        if not user or not ride:
+            return jsonify({
+                'message': 'Rider or user does not exist'
+            }), 404
+        
+        ride_rider = RideRider.query.filter_by(
+            ride_id=ride.id,
+            user_id=user.id
+        ).first()
+        
+        if not ride_rider:
+            return jsonify({
+                'message': 'User is not registered for this ride'
+            }), 404
+        
+        db.session.delete(ride_rider)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Rider removed successfully'
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("Error in /api/rides/remove-rider")
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Failed to remove rider',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/rides/remove-carpool-user', methods=['DELETE'])
+@require_auth
+def remove_carpool_user():
+    try:
+        data = request.get_json()
+
+        required_fields = ['carpool_id', 'user_id']
+        if not all(field in data for field in required_fields):
+            return jsonify({
+                'message': 'missing required fields',
+                'required': required_fields,
+            }), 400
+        
+        user = User.query.get(data['user_id'])
+        ride = Ride.query.filter_by(carpool_id=data['carpool_id']).first()
+        if not user or not ride:
+            return jsonify({
+                'message': 'Rider or user does not exist'
+            }), 404
+        
+        if user.id == ride.driver_id:
+            # User can't unsignup if they signed up to be a driver
+            return jsonify({
+                'message': 'User has signed up to drive and therefore cannot be removed',
+                'valid': False
+            }), 200
+        
+        ride_rider = RideRider.query.filter_by(
+            ride_id=ride.id,
+            user_id=user.id
+        ).first()
+        
+        if not ride_rider:
+            return jsonify({
+                'message': 'User is not registered for this ride',
+                'valid': True
+            }), 200
+        
+        db.session.delete(ride_rider)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Rider removed successfully',
+            'valid': True
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("Error in /api/rides/remove-rider")
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Failed to remove rider',
+            'error': str(e)
+        }), 500
+
+# Car endpoints
+@app.route('/api/cars', methods=['POST'])
+@require_auth 
+def create_or_update_car():
+    try:
+        data = request.get_json()
+
+        required_fields = ['user_id', 'seats']
+        if not all(field in data for field in required_fields):
+            return jsonify({
+                'message': 'Missing required fields',
+                'required': required_fields
+            }), 400
+        
+        user = User.query.get(data['user_id'])
+
+        if not user:
+            return jsonify({
+                'message': 'User does not exist'
+            })        
+        
+        existing_car = Car.query.filter_by(user_id=user.id).first()
+
+        if existing_car:
+            existing_car.color=data.get('color', '')
+            existing_car.model=data.get('model', '')
+            existing_car.seats=data.get('seats')
+            existing_car.license_plate=data.get('license_plate', '')
+
+            db.session.commit()
+            return jsonify(existing_car.serialize()), 201
+        else:
+            new_car = Car(
+                user_id=data.get('user_id'),
+                color=data.get('color', ''),
+                model=data.get('model', ''),
+                seats=data.get('seats'),
+                license_plate=data.get('license_plate', '')
+            )
+            
+            db.session.add(new_car)
+            db.session.commit()
+            return jsonify(new_car.serialize()), 201
+    
+    except Exception as e:
+        db.session.rollback()
+        print("Error in /api/cars:")
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Failed to create car',
+            'error': str(e)
+        }), 500
+    
+@app.route('/api/cars/<int:user_id>', methods=['GET'])
+@require_auth
+def get_car(user_id):
+    """Get a user's car"""
+    try:
+        car = Car.query.filter_by(user_id=user_id).first()
+
+        if car: 
+            return jsonify({
+                'exists': True,
+                'car': car.serialize()
+            }), 200 
+        else:
+            return jsonify({
+                'exists': False
+            }), 200
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch car',
+            'error': str(e)
+        }), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 8000))
