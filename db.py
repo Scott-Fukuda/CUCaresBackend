@@ -455,7 +455,6 @@ class MultiOpportunity(db.Model):
     address = db.Column(db.String, nullable=False)
     nonprofit = db.Column(db.String, nullable=True)
 
-
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
     opportunities = db.relationship(

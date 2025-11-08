@@ -1127,6 +1127,7 @@ def create_opportunity():
             approved = False
 
         print( data.get('multiopp_id', None))
+        allow_carpool = data.get('allow_carpool').lower() == "true"
             
         # Create new opportunity
         new_opportunity = Opportunity(
@@ -1151,20 +1152,18 @@ def create_opportunity():
             redirect_url=data.get('redirect_url', None),
             actual_runtime=data.get('actual_runtime', None),
             approved=approved,
-            allow_carpool=data.get('allow_carpool').lower() == "true",
+            allow_carpool=allow_carpool,
             multiopp_id=data.get('multiopp_id', None),
             multiopp=data.get('multiopp', None)
         )
         db.session.add(new_opportunity)
-        db.session.commit()
+        db.session.flush() 
 
-        allow_carpool = data.get('allow_carpool')
         if allow_carpool:
             new_carpool = Carpool(
                 opportunity=new_opportunity
             )
             db.session.add(new_carpool)
-            db.session.commit()
 
         # mark host as registered with registered=False
         user_opportunity = UserOpportunity(
@@ -2871,6 +2870,7 @@ def generate_opportunities_from_multiopp(multiopp: MultiOpportunity, data: dict)
                 # ✅ Localize to Eastern time, then convert to UTC for DB storage
                 localized_dt = eastern.localize(naive_dt)
                 dt_utc = localized_dt.astimezone(pytz.utc)
+                allow_carpool = data.get('allow_carpool').lower() == "true"
 
                 opp = Opportunity(
                     name=data["name"],
@@ -2888,6 +2888,7 @@ def generate_opportunities_from_multiopp(multiopp: MultiOpportunity, data: dict)
                     host_user_id=data.get("host_user_id"),
                     redirect_url=data.get("redirect_url"),
                     total_slots=data.get("total_slots"),
+                    allow_carpool=allow_carpool,
 
                     # Recurrence-specific fields
                     date=dt_utc,  # store in UTC
@@ -2904,6 +2905,12 @@ def generate_opportunities_from_multiopp(multiopp: MultiOpportunity, data: dict)
 
                 db.session.add(opp)
                 all_opps.append(opp)
+
+                if allow_carpool:
+                    new_carpool = Carpool(
+                        opportunity=opp
+                    )
+                    db.session.add(new_carpool)
 
     db.session.commit()
     return all_opps
