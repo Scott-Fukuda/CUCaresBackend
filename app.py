@@ -2,7 +2,7 @@ import json
 import os
 import uuid
 from flask import Flask, request, jsonify, send_from_directory, make_response, session
-from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail, Ride, RideRider, Car, Carpool, Waiver
+from db import db, User, Organization, Opportunity, UserOpportunity, Friendship, ApprovedEmail, MultiOpportunity, Ride, RideRider, Car, Carpool, Waiver
 from sqlalchemy import select
 
 from datetime import datetime, timedelta, timezone
@@ -59,12 +59,12 @@ except Exception as e:
 env = os.environ.get("MY_ENV", "production")
 
 # restrict API access to requests from secure origin
-# if env == "staging":
-#     CORS(app, origins=["http://localhost:5173"], supports_credentials=True)
-# else: 
-#     CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us"], supports_credentials=True)
+if env == "staging":
+    CORS(app, origins=["http://localhost:5173", "https://campuscares.us", "https://www.campuscares.us"], supports_credentials=True)
+else: 
+    CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us", "https://cu-cares-frontend-git-feature-multiopp-scotts-projects-851bba1b.vercel.app", "https://cu-cares-frontend-git-feature-e-cb5fc1-scotts-projects-851bba1b.vercel.app"], supports_credentials=True)
 
-CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us", "http://localhost:5173"], supports_credentials=True)
+# CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us", "http://localhost:5173"], supports_credentials=True)
 
 # Initialize Firebase Admin SDK
 try:
@@ -121,15 +121,16 @@ db.init_app(app)
 migrate = Migrate(app, db)
 
 # with app.app_context():
-    # For app migrations don't create all tables
-    # db.create_all()
+#     # For app migrations don't create all tables
+#     # db.create_all()
 
-    # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
-    # User.__table__.drop(db.engine)
-    # Opportunity.__table__.drop(db.engine)
-    # Organization.__table__.drop(db.engine)
-    # UserOpportunity.__table__.drop(db.engine)
-    # Friendship.__table__.drop(db.engine)
+#     # NOTE: DON'T UNCOMMENT UNLESS YOU WANT TO DELETE TABLES
+#     User.__table__.drop(db.engine)
+#     Opportunity.__table__.drop(db.engine)
+#     Organization.__table__.drop(db.engine)
+#     UserOpportunity.__table__.drop(db.engine)
+#     Friendship.__table__.drop(db.engine)
+#     MultiOpportunity.__table__.drop(db.engine)
 
 
 # Helper function to handle pagination
@@ -711,7 +712,52 @@ def check_user_exists(email):
             'message': 'Failed to fetch user by email',
             'error': str(e)
         }), 500
-    
+
+
+@app.route('/api/users/minimal', methods=['GET'])
+@require_auth
+def get_users_light():
+    # Query only light user info and org IDs efficiently
+    users = (
+        db.session.query(User)
+        .options(
+            db.load_only(
+                User.id,
+                User.name,
+                User.profile_image,
+                User.email,
+                User.bio,
+                User.car_seats,
+                User.admin,
+                User.phone,
+                User.points,
+                User.carpool_waiver_signed
+            ),
+            db.joinedload(User.organizations).load_only(Organization.id)
+        )
+        .all()
+    )
+
+    result = [
+        {
+            "id": u.id,
+            "name": u.name,
+            "profile_image": u.profile_image,
+            "bio": u.bio,
+            "admin": u.admin,
+            "email": u.email,
+            "car_seats": u.car_seats,
+            "phone": u.phone,
+            "organizationIds": [org.id for org in (u.organizations or [])],
+            "points": u.points or 0,
+            "carpool_waiver_signed": u.carpool_waiver_signed
+        }
+        for u in users
+    ]
+    return jsonify({"users": result})
+
+
+
 @app.route('/api/users/email/<email>', methods=['GET'])
 @require_auth
 def get_user_by_email(email):
@@ -1079,6 +1125,8 @@ def create_opportunity():
             approved = True
         else:
             approved = False
+
+        print( data.get('multiopp_id', None))
             
         # Create new opportunity
         new_opportunity = Opportunity(
@@ -1103,9 +1151,10 @@ def create_opportunity():
             redirect_url=data.get('redirect_url', None),
             actual_runtime=data.get('actual_runtime', None),
             approved=approved,
-            allow_carpool=data.get('allow_carpool').lower() == "true"
+            allow_carpool=data.get('allow_carpool').lower() == "true",
+            multiopp_id=data.get('multiopp_id', None),
+            multiopp=data.get('multiopp', None)
         )
-        
         db.session.add(new_opportunity)
         db.session.commit()
 
@@ -1165,37 +1214,43 @@ def get_opportunities():
 @app.route('/api/opps/current', methods=['GET'])
 @require_auth
 def get_current_opportunities():
-    """Get current opportunities (whose start dates haven't passed) with pagination"""
+    """Get current opportunities (whose dates are not older than yesterday) with pagination"""
     try:
         page = int(request.args.get('page', 1))
         per_page = int(request.args.get('per_page', 10000))
-        
-        # Get current datetime
+
+        # Current UTC datetime
         current_datetime = datetime.utcnow()
-        
-        # Filter opportunities where date is in the future
-        current_opportunities = Opportunity.query.filter(
-            Opportunity.date > current_datetime
-        ).order_by(Opportunity.date.asc())  # Order by date ascending (earliest first)
-        
+
+        # Leeway: allow opportunities from up to 1 day ago
+        leeway_start = current_datetime - timedelta(days=1)
+
+        # Filter: include all opps whose date >= (yesterday at this time)
+        current_opportunities = (
+            Opportunity.query
+            .filter(Opportunity.date >= leeway_start)
+            .order_by(Opportunity.date.asc())
+        )
+
         paginated_opps = paginate(current_opportunities, page, per_page)
-        
+
         return jsonify({
-            'opportunities': [opp.serialize() for opp in paginated_opps.items],
-            'pagination': {
-                'page': paginated_opps.page,
-                'per_page': paginated_opps.per_page,
-                'total': paginated_opps.total
+            "opportunities": [opp.serialize() for opp in paginated_opps.items],
+            "pagination": {
+                "page": paginated_opps.page,
+                "per_page": paginated_opps.per_page,
+                "total": paginated_opps.total,
             },
-            'current_datetime': current_datetime.isoformat()
+            "current_datetime": current_datetime.isoformat(),
+            "leeway_start": leeway_start.isoformat()
         })
-    
+
     except Exception as e:
         return jsonify({
-            'message': 'Failed to fetch current opportunities',
-            'error': str(e)
+            "message": "Failed to fetch current opportunities",
+            "error": str(e)
         }), 500
-
+    
 @app.route('/api/opps/approved', methods=['GET'])
 @require_auth
 def get_approved_opportunities():
@@ -2500,6 +2555,7 @@ def get_opps_csv():
             'actual_runtime',
             'total_slots',
             'total_attended',
+            'total_registered',
             'address',
             'date',
             'num_comments',
@@ -2513,6 +2569,7 @@ def get_opps_csv():
             actual_runtime = opp.actual_runtime if opp.actual_runtime is not None else ''
             total_slots = opp.total_slots if opp.total_slots is not None else ''
             total_attended = sum(1 for uo in (opp.user_opportunities or []) if getattr(uo, 'attended', False))
+            total_registered = sum(1 for uo in (opp.user_opportunities or []) if getattr(uo, 'registered', False))
             address = opp.address or ''
             date = opp.date.isoformat() if getattr(opp, 'date', None) else ''
             num_comments = len(opp.comments or [])
@@ -2525,6 +2582,7 @@ def get_opps_csv():
                 actual_runtime,
                 total_slots,
                 total_attended,
+                total_registered,
                 address,
                 date,
                 num_comments,
@@ -2758,6 +2816,219 @@ def org_service_data_csv():
         mimetype="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+
+def generate_opportunities_from_multiopp(multiopp: MultiOpportunity, data: dict):
+    """Generate individual opportunities from a MultiOpportunity recurrence pattern."""
+    from datetime import datetime, timedelta
+    import pytz
+
+    all_opps = []
+    start_date = multiopp.start_date
+
+    eastern = pytz.timezone("US/Eastern")
+
+    # Flatten day/time mapping list into (weekday, [(time_str, duration), ...]) pairs
+    day_time_pairs = []
+    for entry in multiopp.days_of_week:
+        for weekday, time_list in entry.items():
+            day_time_pairs.append((weekday, time_list))
+
+    total_weeks = multiopp.week_recurrences or 4
+    week_frequency = multiopp.week_frequency or 1
+
+    for week_index in range(total_weeks):
+        # Handle every Nth week (e.g., every 2 weeks)
+        if week_frequency > 1 and week_index % week_frequency != 0:
+            continue
+
+        base_week_start = start_date + timedelta(weeks=week_index)
+
+        for weekday_name, time_list in day_time_pairs:
+            weekday_index = [
+                "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
+            ].index(weekday_name)
+            day_date = base_week_start + timedelta(days=(weekday_index - base_week_start.weekday()) % 7)
+
+            for time_entry in time_list:
+                # Each entry is a tuple or list: (start_time_str, duration)
+                if isinstance(time_entry, (list, tuple)) and len(time_entry) == 2:
+                    start_time_str, duration = time_entry
+                else:
+                    start_time_str, duration = time_entry, 60
+
+                # Parse "HH:MM" or ISO "T" time
+                start_time = (
+                    datetime.fromisoformat(start_time_str).time()
+                    if "T" in start_time_str
+                    else datetime.strptime(start_time_str, "%H:%M").time()
+                )
+
+                # Combine with date (naive datetime)
+                naive_dt = datetime.combine(day_date.date(), start_time)
+
+                # ✅ Localize to Eastern time, then convert to UTC for DB storage
+                localized_dt = eastern.localize(naive_dt)
+                dt_utc = localized_dt.astimezone(pytz.utc)
+
+                opp = Opportunity(
+                    name=data["name"],
+                    description=data.get("description"),
+                    causes=data.get("causes", []),
+                    tags=data.get("tags", []),
+                    address=data["address"],
+                    nonprofit=data.get("nonprofit"),
+                    image=data.get("image"),
+                    approved=data.get("approved", False),
+                    host_org_name=data.get("host_org_name"),
+                    qualifications=data.get("qualifications", []),
+                    visibility=data.get("visibility", []),
+                    host_org_id=data.get("host_org_id"),
+                    host_user_id=data.get("host_user_id"),
+                    redirect_url=data.get("redirect_url"),
+                    total_slots=data.get("total_slots"),
+
+                    # Recurrence-specific fields
+                    date=dt_utc,  # store in UTC
+                    duration=duration,
+                    recurring="recurring",
+                    comments=[],
+                    attendance_marked=False,
+                    actual_runtime=None,
+
+                    # Relationship
+                    multiopp_id=multiopp.id,
+                    multi_opportunity=multiopp,
+                )
+
+                db.session.add(opp)
+                all_opps.append(opp)
+
+    db.session.commit()
+    return all_opps
+
+
+
+@app.route("/api/multiopps", methods=["POST"])
+@require_auth
+def create_multiopp():
+    try: 
+        if request.is_json:
+            data = request.get_json()
+        else:
+            data = request.form.to_dict()
+            # Parse JSON-like fields manually
+            if "days_of_week" in data:
+                data["days_of_week"] = json.loads(data["days_of_week"])
+            if "week_frequency" in data:
+                data["week_frequency"] = int(data["week_frequency"])
+            if "week_recurrences" in data:
+                data["week_recurrences"] = int(data["week_recurrences"])
+            if "approved" in data:
+                data["approved"] = data["approved"].lower() == "true"
+            if "visibility" in data:
+                data["visibility"] = json.loads(request.form["visibility"])
+
+
+        # Step 1: Create MultiOpportunity (recurrence definition)
+        multiopp = MultiOpportunity(
+            name=data["name"],
+            description=data.get("description"),
+            causes=data.get("causes", []),
+            tags=data.get("tags", []),
+            address=data["address"],
+            nonprofit=data.get("nonprofit"),
+            image=data.get("image"),
+            approved=data.get("approved", False),
+            host_org_name=data.get("host_org_name"),
+            qualifications=data.get("qualifications", []),
+            visibility=data.get("visibility", []),
+            host_org_id=data.get("host_org_id"),
+            host_user_id=data.get("host_user_id"),
+            redirect_url=data.get("redirect_url"),
+            total_slots=data.get("total_slots"),
+
+            start_date=datetime.fromisoformat(data["start_date"]),
+            days_of_week=data["days_of_week"],
+            week_frequency=data.get("week_frequency"),
+            week_recurrences=data.get("week_recurrences", 4)
+        )
+
+        db.session.add(multiopp)
+        db.session.commit()
+
+        # Step 2: Generate the actual individual Opportunities
+        generated_opps = generate_opportunities_from_multiopp(multiopp, data)
+
+        # Step 3: Return serialized MultiOpportunity and its generated Opportunities
+        return jsonify({
+            "multiopp": multiopp.serialize(),
+            "generated_opportunities": [opp.serialize() for opp in generated_opps]
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        print("Error in /api/multiopps:")
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Failed to create carpool',
+            'error': str(e)
+        }), 500
+
+# 🟡 GET ALL multiopps
+@app.route("/api/multiopps", methods=["GET"])
+@require_auth
+def get_all_multiopps():
+    multiopps = MultiOpportunity.query.all()
+    return jsonify([m.serialize() for m in multiopps]), 200
+
+
+# 🟢 GET SINGLE multiopp by ID
+@app.route("/api/multiopps/<int:multiopp_id>", methods=["GET"])
+@require_auth
+def get_multiopp(multiopp_id):
+    multiopp = MultiOpportunity.query.get_or_404(multiopp_id)
+    return jsonify(multiopp.serialize()), 200
+
+
+# 🔴 DELETE multiopp by ID
+@app.route("/api/multiopps/<int:multiopp_id>", methods=["DELETE"])
+@require_auth
+def delete_multiopp(multiopp_id):
+    multiopp = MultiOpportunity.query.get_or_404(multiopp_id)
+
+    # Optional: Delete all linked individual opportunities first, if cascade isn’t set up
+   
+
+    db.session.delete(multiopp)
+    db.session.commit()
+    return jsonify({"message": f"MultiOpportunity {multiopp_id} deleted successfully."})
+
+@app.route("/api/multiopps/<int:multiopp_id>/visibility", methods=["PUT"])
+@require_auth
+def update_multiopp_visibility(multiopp_id):
+    """Update only the visibility field of a MultiOpportunity."""
+    data = request.get_json(force=True, silent=True)
+
+    if not data or "visibility" not in data:
+        return jsonify({"error": "Missing 'visibility' field in request body."}), 400
+
+    multiopp = MultiOpportunity.query.get(multiopp_id)
+    if not multiopp:
+        return jsonify({"error": "MultiOpportunity not found."}), 404
+
+    # Update visibility
+    try:
+        if isinstance(data["visibility"], str):
+            multiopp.visibility = json.loads(data["visibility"])
+        else:
+            multiopp.visibility = data["visibility"]
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid format for 'visibility'. Must be JSON array or object."}), 400
+
+    db.session.commit()
+
+    return jsonify({"multiopp": multiopp.serialize()}), 200
 
     
 # Carpool endpoints
