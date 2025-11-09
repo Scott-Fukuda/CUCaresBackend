@@ -19,7 +19,7 @@ from celery import Celery
 import csv, io
 from functools import wraps
 import traceback
-from config import StagingConfig, ProdDBConfig
+from config import StagingConfig
 
 # define db filename
 db_filename = "cucares.db"
@@ -57,7 +57,7 @@ except Exception as e:
     print("S3 functionality will be disabled.")
 
 # restrict API access to requests from secure origin
-if env == "staging" or env == "proddb":
+if env == "staging":
     CORS(app, origins=["http://localhost:5173", "http://127.0.0.1:5173", "https://campuscares.us", "https://www.campuscares.us"], supports_credentials=True)
 else: 
     CORS(app, origins=["https://campuscares.us", "https://www.campuscares.us", "https://cu-cares-frontend-git-feature-multiopp-scotts-projects-851bba1b.vercel.app", "https://cu-cares-frontend-git-feature-e-cb5fc1-scotts-projects-851bba1b.vercel.app"], supports_credentials=True)
@@ -102,8 +102,6 @@ except Exception as e:
 
 if env == "staging":
     app.config.from_object(StagingConfig)
-elif env == "proddb":
-    app.config.from_object(ProdDBConfig)
 
 # setup config
 database_url = os.environ.get('DATABASE_URL', f"sqlite:///{db_filename}")
