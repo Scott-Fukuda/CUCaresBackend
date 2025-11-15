@@ -669,6 +669,32 @@ def get_users():
             'error': str(e)
         }), 500
 
+@app.route('/api/users/netid', methods=['GET'])
+@require_auth
+def get_users_netid():
+    """Get all users netid - requires authentication"""
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10000))
+        
+        users = User.query.order_by(User.id.desc()).email
+        paginated_users = paginate(users, page, per_page)
+        
+        return jsonify({
+            'users': [user.serialize() for user in paginated_users.items],
+            'pagination': {
+                'page': paginated_users.page,
+                'per_page': paginated_users.per_page,
+                'total': paginated_users.total
+            }
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch users',
+            'error': str(e)
+        }), 500
+
 @app.route('/api/users/<int:user_id>', methods=['GET'])
 @require_auth
 def get_user(user_id):
@@ -3247,6 +3273,7 @@ def remap_opportunity_slots_compact(multiopp_id):
             "new_days_of_week": multiopp.days_of_week
         }
     }), 200
+
 
 
 
