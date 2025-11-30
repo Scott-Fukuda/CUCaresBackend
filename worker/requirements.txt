@@ -1,0 +1,7 @@
+celery
+redis
+requests
+pytz
+python-dotenv
+tabulate
+# plus any other packages your tasks.py, mailgun.py, queues.py need

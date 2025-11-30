@@ -20,10 +20,15 @@ import csv, io
 from functools import wraps
 import traceback
 from config import StagingConfig
+from scheduler import schedule_carpool_email, cancel_scheduled_email
+import requests 
+import pytz 
+from collections import defaultdict
 
 # define db filename
 db_filename = "cucares.db"
 app = Flask(__name__, static_folder='build', static_url_path='')
+# app.register_blueprint(cron)
 
 # File upload configuration
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
@@ -32,6 +37,9 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 load_dotenv()
 
 app.secret_key = os.environ["FLASK_SECRET_KEY"]
+MAILGUN_API_KEY = os.environ["MG_API_KEY"]
+DOMAIN = "mg.campuscares.us"
+API_SECRET = os.environ["API_SECRET"]
 
 # S3 configuration (with fallback for development)
 try:
@@ -149,6 +157,9 @@ def require_auth(f):
             auth_header = request.headers.get('Authorization')
             
             if not auth_header:
+                if env == "staging":
+                    request.user = {"uid": "testuser", "email": "test@example.com"}
+                    return f(*args, **kwargs)
                 return jsonify({
                     'error': 'Authorization header is required',
                     'message': 'Please provide a valid Firebase ID token'
@@ -268,6 +279,25 @@ def verify_firebase_token(token):
             'success': False,
             'error': str(e)
         }
+
+def add_carpool(opportunity, type):
+    """Add carpool to db and schedule email in redis"""
+    new_carpool = Carpool(
+            opportunity=opportunity
+        )
+    db.session.add(new_carpool)
+    db.session.commit()
+
+    event_dt = opportunity.date
+    if type == 'opp':
+        event_dt -= timedelta(hours=4) + timedelta(hours=12) - timedelta(hours=7)
+    elif type == 'multiopp':
+        event_dt= pytz.utc.localize(event_dt)
+
+    try: 
+        schedule_carpool_email(opportunity.id, event_dt)
+    except Exception as e:
+        print("Error:", e)
     
 # ROUTES
 @app.route('/api/hi')
@@ -295,6 +325,330 @@ if env == "staging":
             return jsonify(user.serialize()), 200
         print("User not found")
         return "User not found", 404
+
+# Email Endpoint
+def create_driver_email_body(ride, riders, opportunity, time_data):
+    plain_body = f"""Hi {ride.driver.name},
+
+Thank you for volunteering to drive for the upcoming CampusCares event! Here are the details for your carpool:
+
+⭐️ RIDERS YOU'RE PICKING UP
+"""
+    riders_by_location = defaultdict(list)
+    numbers = []
+    for r in riders:
+        riders_by_location[r.pickup_location].append({
+            'name': r.user.name,
+            'notes': r.notes,
+            'phone': r.user.phone
+        })
+        numbers.append(r.user.phone)
+
+    for location, rider_list in riders_by_location.items():
+        plain_body += "\t📍 " + location + ": \n"
+        for rider in rider_list:
+            plain_body += "\t\t" + rider['name'] + " (" + rider['phone'] + ") "
+            if rider['notes']:
+                plain_body += " | Rider note: " + rider['notes'] 
+            plain_body += "\n"
+
+    plain_body += f"""
+	* 📲 Quick copy-and-paste to create a group chat with your riders: {', '.join(numbers)}
+
+⭐️ EVENT INFORMATION 
+Event: {opportunity.name}
+Date/Time: {time_data['formal']}
+Location: {opportunity.address}
+
+Thank you for helping make this event a success! If you have any questions or issues, contact the CampusCares team at team@campuscares.us.
+
+Safe driving,
+CampusCares Team
+    """
+
+    body = f"""<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
+<p>Hi {ride.driver.name},</p>
+
+<p>Thank you for volunteering to drive for the upcoming CampusCares event! Here are the details for your carpool:</p>
+
+<hr style="border: none; border-top: 2px solid #e0e0e0; margin: 20px 0;">
+
+<h3 style="color: #2c5aa0; margin-bottom: 10px;">🚗 RIDERS YOU'RE PICKING UP</h3>
+<div style="margin-left: 20px;">
+"""
+    riders_by_location = defaultdict(list)
+    numbers = []
+    for r in riders:
+        riders_by_location[r.pickup_location].append({
+            'name': r.user.name,
+            'notes': r.notes,
+            'phone': r.user.phone
+        })
+        numbers.append(r.user.phone)
+
+    for location, rider_list in riders_by_location.items():
+        body += '<p style="margin-bottom: 5px;"><strong>📍 ' + location + '</strong></p>'
+        body += '<ul style="list-style-type: none; padding-left: 20px; margin-top: 5px; margin-bottom: 15px;">'
+        for rider in rider_list:
+            body += '<li style="margin-bottom: 5px;">' + rider['name'] + " - (" + rider['phone'] + ") "
+            if rider['notes']:
+                body += ' <em style="color: #666;">– Note: ' + rider['notes'] + '</em>'
+            body += '</li>'
+        body += '</ul>'
+    
+    body += f"""
+    </div>
+
+    <p style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; font-size: 12px;">
+        📲 <em>Quick copy-and-paste to create a group chat with your riders:</em> {', '.join(numbers)}
+    </p>
+
+    <p style="background-color: #fff3cd; padding: 12px; border-left: 4px solid #ffc107; border-radius: 3px;">
+        Please confirm your pickup schedule and any specific arrangements with your riders using the contact information above.
+    </p>
+
+    <hr style="border: none; border-top: 2px solid #e0e0e0; margin: 20px 0;">
+
+    <h3 style="color: #2c5aa0; margin-bottom: 10px;">📅 EVENT DETAILS</h3>
+
+    <p>
+        <strong>Event:</strong> {opportunity.name}<br>
+        <strong>Date & Time:</strong> {time_data['formal']}<br>
+        <strong>Location:</strong> {opportunity.address}
+    </p>
+
+    <hr style="border: none; border-top: 2px solid #e0e0e0; margin: 20px 0;">
+
+    <p>Thank you for helping make this event a success! If you have any questions or issues, contact the CampusCares team at
+         <a href="mailto:team@campuscares.us" style="color: #2c5aa0;">team@campuscares.us</a>.</p>
+
+    <p>
+        Safe driving,<br>
+        The CampusCares Team
+    </p>
+</body>
+
+</html>
+"""
+    return body, plain_body
+
+def create_rider_email_body(ride, rider, car, riders, opportunity, time_data):
+    plain_body = f"""Hi {rider.user.name},
+
+Thank you for signing up to volunteer for the upcoming CampusCares event! Here are the details for your carpool:
+
+📅 EVENT INFORMATION
+Event: {opportunity.name}
+Date/Time: {time_data['formal']}
+Location: {opportunity.address}
+
+🚗 RIDE INFORMATION
+Pickup Location: {rider.pickup_location} 
+Driver Contact Information: 
+    Name: {ride.driver.name}
+    Email: {ride.driver.email}
+    Phone Number: {ride.driver.phone}\n
+    """
+
+    if car and car.color:
+        plain_body += f"Car Color: {car.color}\n"
+    if car and car.model:
+        plain_body += f"Car Model: {car.model}\n"
+    if car and car.license_plate:
+        plain_body += f"Last 4 Characters of License Plate: {car.license_plate}\n"
+
+    other_riders = ', '.join([r.user.name for r in riders if r.id != rider.id])
+    plain_body += f"""
+Other Riders in Your Carpool: {other_riders}
+
+Your driver may reach out to you with further information, but unless told otherwise, please arrive at the pickup location at least 20 minutes prior to the event's start time. 
+Please don't hesitate to reach out to your driver if you have any questions or special requests. For any other inquiries, contact the CampusCares team at team@campuscares.us.
+
+Thank you again for volunteering!
+
+Best Regards,
+CampusCares Team
+    """
+
+    body = f"""<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
+    <p>Hi {rider.user.name},</p>
+
+    <p>Thank you for signing up to volunteer for the upcoming CampusCares event! Below are your carpool details:</p>
+
+    <hr style="border: none; border-top: 2px solid #e0e0e0; margin: 20px 0;">
+
+    <h3 style="color: #2c5aa0; margin-bottom: 10px;">🚗 YOUR RIDE INFORMATION</h3>
+
+    <p>
+        <strong>Pickup Location:</strong> {rider.pickup_location}<br>
+        <strong>Driver Contact:</strong><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;Name: {ride.driver.name}<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;Email: {ride.driver.email}<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;Phone: {ride.driver.phone}<br>
+    </p>
+"""
+    if car and car.color:
+        body += f"<strong>Car Color:</strong> {car.color}<br>"
+    if car and car.model:
+        body += f"<strong>Car Model:</strong> {car.model}<br>"
+    if car and car.license_plate:
+        body += f"<strong>Last 4 characters of license plate:</strong> {car.license_plate}<br>"
+
+    body += f"""
+    <p><strong>Other Riders in Your Carpool:</strong> {other_riders}</p>
+
+    <hr style="border: none; border-top: 2px solid #e0e0e0; margin: 20px 0;">
+
+    <h3 style="color: #2c5aa0; margin-bottom: 10px;">📅 EVENT DETAILS</h3>
+
+    <p>
+        <strong>Event:</strong> {opportunity.name}<br>
+        <strong>Date & Time:</strong> {time_data['formal']}<br>
+        <strong>Location:</strong> {opportunity.address}
+    </p>
+
+    <p style="background-color: #fff3cd; padding: 12px; border-left: 4px solid #ffc107; border-radius: 3px;">
+        <strong>Important:</strong> Unless told otherwise, please arrive at your pickup location at least 20 minutes before the event start
+        time.
+    </p>
+
+    <hr style="border: none; border-top: 2px solid #e0e0e0; margin: 20px 0;">
+
+    <p>Your driver may reach out with additional information. If you have any questions or special requests, please
+        contact your driver directly. For other questions or concerns, reach out to us at <a
+            href="mailto:team@campuscares.us" style="color: #2c5aa0;">team@campuscares.us</a>.</p>
+
+    <p>Thank you for volunteering with CampusCares!</p>
+
+    <p>
+        Best,<br>
+        The CampusCares Team
+    </p>
+</body>
+
+</html>
+"""
+    return body, plain_body
+
+def format_datetime(dt_input, multiopp_id):
+    """Format a datetime from the database (assume UTC) to US/Eastern local time."""
+    dt_est = dt_input
+    print(f"id: {multiopp_id}")
+    if multiopp_id:
+        print("yuper")
+        dt_utc = pytz.utc.localize(dt_input)
+        eastern = pytz.timezone('US/Eastern')
+        dt_est = dt_utc.astimezone(eastern)
+    else:
+        dt_est = dt_input - timedelta(hours=4)
+
+    short_format = dt_est.strftime('%-m/%-d/%y')  
+    formal_format = dt_est.strftime('%B %-d, %Y, %-I:%M %p')  
+
+    return {
+        'short': short_format,
+        'formal': formal_format,
+        'datetime': dt_est.isoformat()
+    }
+
+def require_api_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Missing or invalid authorization'}), 401
+        
+        token = auth_header.split(' ')[1]
+        if token != API_SECRET:
+            return jsonify({'error': 'Invalid API key'}), 401
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/api/send-carpool-email', methods=['POST'])
+@require_api_key
+def send_carpool_email_endpoint():
+    """
+    HTTP endpoint that Cloudflare Worker calls to send emails.
+    This keeps your Fly.io app active only when needed.
+    """
+    try:
+        data = request.get_json()
+        opportunity_id = data.get('opportunity_id')
+        
+        if not opportunity_id:
+            return jsonify({'error': 'Missing opportunity_id'}), 400
+        
+        # Import your models
+        from shared import Opportunity, Carpool, Ride, Car
+        
+        opportunity = Opportunity.query.get(opportunity_id)
+        if not opportunity:
+            return jsonify({'error': 'Opportunity not found'}), 404
+        
+        time_data = format_datetime(opportunity.date, opportunity.multiopp_id)
+        print(f"OPP: {opportunity}")
+        print(f"MULTIOPP ID: {opportunity.multiopp_id}")
+        carpool = Carpool.query.filter_by(opportunity_id=opportunity_id).first()
+        
+        if not carpool:
+            return jsonify({'error': 'No carpool found'}), 404
+        
+        rides = Ride.query.filter_by(carpool_id=carpool.id).all()
+        
+        emails_sent = 0
+        
+        for ride in rides:
+            car = Car.query.filter_by(user_id=ride.driver_id).first()
+            riders = ride.ride_riders
+            subject = f"[{time_data['short']}] Carpool Information for {opportunity.name}"
+
+            # Send driver email
+            body, plain_body = create_driver_email_body(ride, riders, opportunity, time_data)
+            response = requests.post(
+                f"https://api.mailgun.net/v3/{DOMAIN}/messages",
+                auth=("api", MAILGUN_API_KEY),
+                data={
+                    "from": f"CampusCares <postmaster@{DOMAIN}>",
+                    "to": ride.driver.email,
+                    "subject": subject,
+                    "text": plain_body,
+                    "html": body
+                }
+            )
+            
+            if response.status_code == 200:
+                emails_sent += 1
+
+            # Send rider emails
+            for rider in riders:
+                body, plain_body = create_rider_email_body(ride, rider, car, riders, opportunity, time_data)
+                response = requests.post(
+                    f"https://api.mailgun.net/v3/{DOMAIN}/messages",
+                    auth=("api", MAILGUN_API_KEY),
+                    data={
+                        "from": f"CampusCares <postmaster@{DOMAIN}>",
+                        "to": rider.user.email,
+                        "subject": subject,
+                        "text": plain_body,
+                        "html": body
+                    }
+                )
+                
+                if response.status_code == 200:
+                    emails_sent += 1
+        
+        return jsonify({
+            'success': True,
+            'emails_sent': emails_sent,
+            'opportunity_id': opportunity_id
+        }), 200
+        
+    except Exception as e:
+        print(f"Error sending carpool email: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 # Special Endpoints
 @app.route('/api/register-opp', methods=['POST'])
@@ -1160,10 +1514,7 @@ def create_opportunity():
         db.session.flush() 
 
         if allow_carpool:
-            new_carpool = Carpool(
-                opportunity=new_opportunity
-            )
-            db.session.add(new_carpool)
+            add_carpool(new_opportunity, 'opp')
 
         # mark host as registered with registered=False
         user_opportunity = UserOpportunity(
@@ -1183,7 +1534,7 @@ def create_opportunity():
             'message': 'Failed to create opportunity',
             'error': str(e)
         }), 500
-
+    
 @app.route('/api/opps', methods=['GET'])
 @require_auth
 def get_opportunities():
@@ -1441,12 +1792,13 @@ def update_opportunity(opp_id):
     try:
         opp = Opportunity.query.get_or_404(opp_id)
         points = getattr(opp, "duration", 0) or 0
+        init_allow_carpool = opp.allow_carpool
 
         # Check if this is a multipart form (file upload) or JSON
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'causes', 'tags', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'duration','qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime']:
+            for field in ['name', 'causes', 'tags', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'duration','qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime', 'allow_carpool']:
                 if field in request.form:
                     data[field] = request.form[field]
                 if field == 'date':
@@ -1466,7 +1818,7 @@ def update_opportunity(opp_id):
         
         # Only update fields that exist in the model
         valid_fields = ['name', 'duration', 'description', 'date', 'address', 'approved', 'nonprofit', 'total_slots', 'image',
-                       'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime', 'tags']       
+                       'host_org_id', 'host_user_id', 'host_org_name', 'comments', 'qualifications', 'recurring', 'visibility', 'attendance_marked', 'redirect_url', 'actual_runtime', 'tags', 'allow_carpool']       
         
         for field in valid_fields:
             if field in data:
@@ -1550,6 +1902,10 @@ def update_opportunity(opp_id):
                         db.session.commit()
                 else:
                     setattr(opp, field, data[field])
+        db.session.flush() 
+        
+        if data['allow_carpool'] and not init_allow_carpool:
+            add_carpool(opp, 'opp')
         
         # Commit all changes
         db.session.commit()
@@ -1571,6 +1927,9 @@ def delete_opportunity(opp_id):
         opp = Opportunity.query.get_or_404(opp_id)
         db.session.delete(opp)
         db.session.commit()
+
+        cancel_scheduled_email(opp_id)
+
         return jsonify({
             'message': 'Opportunity deleted successfully'
         }), 200
@@ -2905,12 +3264,10 @@ def generate_opportunities_from_multiopp(multiopp: MultiOpportunity, data: dict)
 
                 db.session.add(opp)
                 all_opps.append(opp)
+                db.session.flush() 
 
                 if allow_carpool:
-                    new_carpool = Carpool(
-                        opportunity=opp
-                    )
-                    db.session.add(new_carpool)
+                    add_carpool(opp, 'multiopp')
 
     db.session.commit()
     return all_opps
@@ -3037,46 +3394,6 @@ def update_multiopp_visibility(multiopp_id):
 
     return jsonify({"multiopp": multiopp.serialize()}), 200
 
-    
-# Carpool endpoints
-@app.route('/api/carpools', methods=['POST'])
-@require_auth
-def create_carpool():
-    try:
-        data = request.get_json()
-
-        opportunity_id = data['opportunity_id']
-        if not opportunity_id:
-            return jsonify({
-                'message': 'Missing opportunity id',
-                'required': 'opportunity_id'
-            }), 400  
-
-        opportunity = Opportunity.query.get(opportunity_id)
-
-        if not opportunity:
-            return jsonify({
-                'message': 'Opportunity does not exist'
-            }), 400  
-
-        new_carpool = Carpool(
-            opportunity_id=data.get('opportunity_id')
-        )
-        
-        db.session.add(new_carpool)
-        db.session.commit()
-        
-        return jsonify(new_carpool.serialize()), 201
-    
-    except Exception as e:
-        db.session.rollback()
-        print("Error in /api/carpools:")
-        traceback.print_exc()
-        return jsonify({
-            'message': 'Failed to create carpool',
-            'error': str(e)
-        }), 500
-
 # Ride endpoints
 @app.route('/api/rides', methods=['POST'])
 @require_auth 
@@ -3156,6 +3473,7 @@ def add_rider():
             return jsonify({
                 'message': 'Rider or user does not exist'
             })
+        print('PICKUP', data['pickup_location'])
         
         new_ride_rider = RideRider(
             ride_id=ride.id,

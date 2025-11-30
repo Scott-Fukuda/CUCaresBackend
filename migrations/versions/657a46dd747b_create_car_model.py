@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '657a46dd747b'
-down_revision = '1a2b3c4d5e6f'  # Now depends on carpool tables
+down_revision = 'cb09c83d0f8f' 
 branch_labels = None
 depends_on = None
 
