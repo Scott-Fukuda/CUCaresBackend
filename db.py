@@ -117,8 +117,6 @@ class User(db.Model):
     )
 
     waiver = db.relationship("Waiver", back_populates="user")
-    ride_riders = db.relationship("RideRider", back_populates="user")
-    car = db.relationship("Car", back_populates="user", uselist=False)
 
     def __init__(self, **kwargs):
         self.profile_image = kwargs.get("profile_image")
@@ -155,7 +153,7 @@ class User(db.Model):
             "academic_level": self.academic_level,
             "major": self.major,
             "birthday": self.birthday,
-            "car_seats": self.car.seats if self.car else self.car_seats,
+            "car_seats": self.car_seats,
             "bio": self.bio,
             "registration_date": self.registration_date,
             "carpool_waiver_signed": self.carpool_waiver_signed,
@@ -291,7 +289,6 @@ class Opportunity(db.Model):
     attendance_marked = db.Column(db.Boolean, default=False)
     redirect_url = db.Column(db.String, nullable=True, default=None)
     actual_runtime = db.Column(db.Integer, nullable=True)
-    allow_carpool = db.Column(db.Boolean, nullable=False, default=False)
 
     host_org_id = db.Column(db.Integer, db.ForeignKey("organization.id"))
     host_org = db.relationship("Organization", back_populates="opportunities_hosted")
@@ -300,7 +297,8 @@ class Opportunity(db.Model):
     host_user = db.relationship("User", back_populates="opportunities_hosted")
 
     user_opportunities = db.relationship('UserOpportunity', back_populates='opportunity', cascade="all", passive_deletes=True)
-    carpool = db.relationship("Carpool", back_populates="opportunity", cascade="all, delete-orphan", passive_deletes=True, uselist=False)
+    
+
     multiopp_id = db.Column(db.Integer, db.ForeignKey("multi_opportunity.id"), nullable=True)
     multi_opportunity = db.relationship("MultiOpportunity", back_populates="opportunities")
 
@@ -328,7 +326,6 @@ class Opportunity(db.Model):
         self.actual_runtime = kwargs.get("actual_runtime", None)
         self.multiopp_id = kwargs.get("multiopp_id", None)
         self.multi_opportunity = kwargs.get("multi_opportunity", None)
-        self.allow_carpool = kwargs.get("allow_carpool", False)
 
     def serialize(self):
         return {
@@ -367,8 +364,6 @@ class Opportunity(db.Model):
                 }
                 if self.multi_opportunity else None
             ),
-            "allow_carpool": self.allow_carpool,
-            "carpool_id": self.carpool.id if self.carpool else None,
             "involved_users": [
                 {
                     "user": uo.user.name,
@@ -455,6 +450,7 @@ class MultiOpportunity(db.Model):
     address = db.Column(db.String, nullable=False)
     nonprofit = db.Column(db.String, nullable=True)
 
+
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
     opportunities = db.relationship(
@@ -463,6 +459,7 @@ class MultiOpportunity(db.Model):
 
     def serialize(self):
         return {
+           
             "id": self.id,
             "name": self.name,
             "description": self.description,
@@ -497,85 +494,9 @@ class MultiOpportunity(db.Model):
                         for uo in getattr(opp, "user_opportunities", []) or []
                         if getattr(uo, "user", None)  # ensure no null user
                     ],
-                    "allow_carpool": opp.allow_carpool
                 }
                 for opp in getattr(self, "opportunities", []) or []
-            ],    
+            ],
+
+                
     }
-
-class Carpool(db.Model):
-    __tablename__ = "carpool"
-    id = db.Column(db.Integer, primary_key=True)
-    opportunity_id = db.Column(db.Integer, db.ForeignKey("opportunity.id", ondelete="CASCADE"), nullable=False)
-
-    rides = db.relationship("Ride", back_populates="carpool", cascade="all, delete-orphan", passive_deletes=True)
-    opportunity = db.relationship("Opportunity", back_populates="carpool")
-
-    def serialize(self):
-        return {
-            "id": self.id,
-            "opportunity_id": self.opportunity_id
-        }
-
-class RideRider(db.Model):
-    __tablename__ = "ride_riders"
-    id = db.Column(db.Integer, primary_key=True)
-    ride_id = db.Column(db.Integer, db.ForeignKey("ride.id"), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    pickup_location = db.Column(db.String, nullable=False)
-    notes = db.Column(db.String, nullable=True)
-
-    ride = db.relationship("Ride", back_populates="ride_riders")
-    user = db.relationship("User", back_populates="ride_riders")
-
-    def serialize(self):
-        return {
-            "id": self.id,
-            "ride_id": self.ride_id,
-            "user_id": self.user_id,
-            "profile_image": self.user.profile_image,
-            "name": self.user.name,
-            "pickup_location": self.pickup_location,
-            "notes": self.notes
-        }
-
-class Ride(db.Model):
-    __tablename__ = "ride"
-    id = db.Column(db.Integer, primary_key=True)
-    carpool_id = db.Column(db.Integer, db.ForeignKey("carpool.id"), nullable=False)
-    driver_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-
-    carpool = db.relationship("Carpool", back_populates="rides")
-    ride_riders = db.relationship("RideRider", back_populates="ride", cascade="all, delete-orphan")
-    driver = db.relationship("User", foreign_keys=[driver_id])
-
-    def serialize(self):
-        return {
-            "id": self.id,
-            "carpool_id": self.carpool_id,
-            "driver_id": self.driver_id,
-            "driver_name": self.driver.name if self.driver else None,
-            "driver_seats": self.driver.car.seats if self.driver and self.driver.car else None,
-            "riders": [rider.serialize() for rider in self.ride_riders]
-        }
-
-class Car(db.Model):
-    __tablename__ = "car"
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    color = db.Column(db.String, nullable=True)
-    model = db.Column(db.String, nullable=True)
-    seats = db.Column(db.Integer, nullable=False)
-    license_plate = db.Column(db.String, nullable=True)
-
-    user = db.relationship("User", back_populates="car")
-
-    def serialize(self):
-        return {
-            "id": self.id,
-            "user_id": self.user_id,
-            "color": self.color,
-            "model": self.model,
-            "seats": self.seats,
-            "license_plate": self.license_plate
-        }

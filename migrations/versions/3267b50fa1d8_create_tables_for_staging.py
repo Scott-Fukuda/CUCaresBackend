@@ -90,40 +90,10 @@ def upgrade():
     sa.Column('actual_runtime', sa.Integer(), nullable=True),
     sa.Column('host_org_id', sa.Integer(), nullable=True),
     sa.Column('host_user_id', sa.Integer(), nullable=True),
-    sa.Column('allow_carpool', sa.Boolean(), nullable=False),
     sa.ForeignKeyConstraint(['host_org_id'], ['organization.id'], ),
     sa.ForeignKeyConstraint(['host_user_id'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    
-    # ADD THESE THREE TABLES HERE:
-    op.create_table('carpool',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('opportunity_id', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstraint(['opportunity_id'], ['opportunity.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    
-    op.create_table('ride',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('carpool_id', sa.Integer(), nullable=False),
-    sa.Column('driver_id', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstraint(['carpool_id'], ['carpool.id'], ),
-    sa.ForeignKeyConstraint(['driver_id'], ['user.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    
-    op.create_table('ride_riders',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('ride_id', sa.Integer(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('pickup_location', sa.String(), nullable=False),
-    sa.ForeignKeyConstraint(['ride_id'], ['ride.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    
-    # Continue with existing tables:
     op.create_table('user_organization',
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('organization_id', sa.Integer(), nullable=False),
@@ -163,12 +133,6 @@ def downgrade():
     op.drop_table('user_opportunity')
     op.drop_table('waiver')
     op.drop_table('user_organization')
-    
-    # ADD THESE THREE DROPS HERE (in reverse order of creation):
-    op.drop_table('ride_riders')
-    op.drop_table('ride')
-    op.drop_table('carpool')
-    
     op.drop_table('opportunity')
     op.drop_table('organization')
     op.drop_table('friendship')
