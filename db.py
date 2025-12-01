@@ -487,6 +487,7 @@ class MultiOpportunity(db.Model):
                     "id": opp.id,
                     "date": opp.date,
                     "duration": opp.duration,
+                    "total_slots": opp.total_slots,
                     "involved_users": [
                         {
                             "id": uo.user.id,
