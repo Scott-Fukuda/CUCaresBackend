@@ -463,7 +463,6 @@ class MultiOpportunity(db.Model):
 
     def serialize(self):
         return {
-           
             "id": self.id,
             "name": self.name,
             "description": self.description,
@@ -497,11 +496,10 @@ class MultiOpportunity(db.Model):
                         for uo in getattr(opp, "user_opportunities", []) or []
                         if getattr(uo, "user", None)  # ensure no null user
                     ],
+                    "allow_carpool": opp.allow_carpool
                 }
                 for opp in getattr(self, "opportunities", []) or []
-            ],
-
-                
+            ],    
     }
 
 class Carpool(db.Model):
