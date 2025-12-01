@@ -3272,8 +3272,6 @@ def generate_opportunities_from_multiopp(multiopp: MultiOpportunity, data: dict)
     db.session.commit()
     return all_opps
 
-
-
 @app.route("/api/multiopps", methods=["POST"])
 @require_auth
 def create_multiopp():
@@ -3336,6 +3334,59 @@ def create_multiopp():
         traceback.print_exc()
         return jsonify({
             'message': 'Failed to create carpool',
+            'error': str(e)
+        }), 500
+
+@app.route("/api/multiopps/<int:multiopp_id>", methods=["PUT"])
+@require_auth
+def update_multiopp(multiopp_id):
+    """Update a MultiOpportunity and propagate changes to its opportunities"""
+    try:
+        multiopp = MultiOpportunity.query.get_or_404(multiopp_id)
+        
+        if request.is_json:
+            data = request.get_json()
+        else:
+            data = request.form.to_dict()
+            if "approved" in data:
+                data["approved"] = data["approved"].lower() == "true"
+
+        update_fields = ['name', 'description', 'address', 'nonprofit', 
+                        'redirect_url']
+        
+        for field in update_fields:
+            if field in data:
+                setattr(multiopp, field, data[field])
+
+        db.session.commit()
+
+        opportunities = Opportunity.query.filter_by(multiopp_id=multiopp_id).all()
+        
+        for opp in opportunities:
+            for field in update_fields:
+                if field in data:
+                    setattr(opp, field, data[field])
+            
+            db.session.flush()
+            
+            if not opp.allow_carpool and data["allow_carpool"]:
+                setattr(opp,'allow_carpool', True)
+                add_carpool(opp, 'multiopp')
+        
+        db.session.commit()
+        
+        return jsonify({
+            "message": "MultiOpportunity and opportunities updated successfully",
+            "multiopp": multiopp.serialize(),
+            "updated_opportunities": [opp.serialize() for opp in opportunities]
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("Error in PUT /api/multiopps/<id>:")
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Failed to update MultiOpportunity',
             'error': str(e)
         }), 500
 
