@@ -266,8 +266,15 @@ def save_opportunity_image(file, opportunity_id):
 def verify_firebase_token(token):
     """Verify Firebase ID token and return user info"""
     try:
+        # Add this debug line
+        print(f"Firebase apps initialized: {len(firebase_admin._apps)}")
+        print(f"Attempting to verify token starting with: {token[:20]}")
+        
         # Verify the token
         decoded_token = auth.verify_id_token(token)
+        
+        print(f"Token verified successfully for user: {decoded_token['uid']}")
+        
         return {
             'success': True,
             'user_id': decoded_token['uid'],
@@ -276,6 +283,12 @@ def verify_firebase_token(token):
             'picture': decoded_token.get('picture')
         }
     except Exception as e:
+        print(f"=== TOKEN VERIFICATION FAILED ===")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        
         return {
             'success': False,
             'error': str(e)
