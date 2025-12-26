@@ -343,31 +343,63 @@ if env == "staging":
 # Email Endpoint
 def create_driver_email_body(ride, riders, opportunity, time_data):
     plain_body = f"""Hi {ride.driver.name},
+    """
+    body = f"""<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
+<p>Hi {rider.driver.name},</p>
+"""
+    
+    if not riders:
+        plain_body += f"""
+Thank you for signing up to volunteer for the upcoming CampusCares event, {opportunity.name}!
 
+At this time, no volunteers signed up for your ride, so it will not be needed for this event.
+
+Thank you for being willing to drive and support our volunteers. We appreciate your time and generosity.
+
+Best regards,
+CampusCares Team
+"""
+        body += f"""
+    <p>Thank you for signing up to volunteer for the upcoming CampusCares event, {opportunity.name}!</p>
+    <p>At this time, no volunteers signed up for your ride, so it will not be needed for this event.</p>
+    <p>Thank you for being willing to drive and support our volunteers. We appreciate your time and generosity.</p>
+<p>
+    Best regards,<br>
+    The CampusCares Team
+</p>
+</body>
+
+</html>
+"""
+        
+    else: 
+        plain_body += f"""
 Thank you for volunteering to drive for the upcoming CampusCares event! Here are the details for your carpool:
 
 ⭐️ RIDERS YOU'RE PICKING UP
 """
-    riders_by_location = defaultdict(list)
-    numbers = []
-    for r in riders:
-        riders_by_location[r.pickup_location].append({
-            'name': r.user.name,
-            'notes': r.notes,
-            'phone': r.user.phone
-        })
-        numbers.append(r.user.phone)
 
-    for location, rider_list in riders_by_location.items():
-        plain_body += "\t📍 " + location + ": \n"
-        for rider in rider_list:
-            plain_body += "\t\t" + rider['name'] + " (" + rider['phone'] + ") "
-            if rider['notes']:
-                plain_body += " | Rider note: " + rider['notes'] 
-            plain_body += "\n"
+        riders_by_location = defaultdict(list)
+        numbers = []
+        for r in riders:
+            riders_by_location[r.pickup_location].append({
+                'name': r.user.name,
+                'notes': r.notes,
+                'phone': r.user.phone
+            })
+            numbers.append(r.user.phone)
 
-    plain_body += f"""
-	* 📲 Quick copy-and-paste to create a group chat with your riders: {', '.join(numbers)}
+        for location, rider_list in riders_by_location.items():
+            plain_body += "\t📍 " + location + ": \n"
+            for rider in rider_list:
+                plain_body += "\t\t" + rider['name'] + " (" + rider['phone'] + ") "
+                if rider['notes']:
+                    plain_body += " | Rider note: " + rider['notes'] 
+                plain_body += "\n"
+
+        plain_body += f"""
+    * 📲 Quick copy-and-paste to create a group chat with your riders: {', '.join(numbers)}
 
 ⭐️ EVENT INFORMATION 
 Event: {opportunity.name}
@@ -378,12 +410,9 @@ Thank you for helping make this event a success! If you have any questions or is
 
 Safe driving,
 CampusCares Team
-    """
+        """
 
-    body = f"""<html>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
-<p>Hi {ride.driver.name},</p>
-
+        body += f"""
 <p>Thank you for volunteering to drive for the upcoming CampusCares event! Here are the details for your carpool:</p>
 
 <hr style="border: none; border-top: 2px solid #e0e0e0; margin: 20px 0;">
@@ -391,27 +420,27 @@ CampusCares Team
 <h3 style="color: #2c5aa0; margin-bottom: 10px;">🚗 RIDERS YOU'RE PICKING UP</h3>
 <div style="margin-left: 20px;">
 """
-    riders_by_location = defaultdict(list)
-    numbers = []
-    for r in riders:
-        riders_by_location[r.pickup_location].append({
-            'name': r.user.name,
-            'notes': r.notes,
-            'phone': r.user.phone
-        })
-        numbers.append(r.user.phone)
+        riders_by_location = defaultdict(list)
+        numbers = []
+        for r in riders:
+            riders_by_location[r.pickup_location].append({
+                'name': r.user.name,
+                'notes': r.notes,
+                'phone': r.user.phone
+            })
+            numbers.append(r.user.phone)
 
-    for location, rider_list in riders_by_location.items():
-        body += '<p style="margin-bottom: 5px;"><strong>📍 ' + location + '</strong></p>'
-        body += '<ul style="list-style-type: none; padding-left: 20px; margin-top: 5px; margin-bottom: 15px;">'
-        for rider in rider_list:
-            body += '<li style="margin-bottom: 5px;">' + rider['name'] + " - (" + rider['phone'] + ") "
-            if rider['notes']:
-                body += ' <em style="color: #666;">– Note: ' + rider['notes'] + '</em>'
-            body += '</li>'
-        body += '</ul>'
-    
-    body += f"""
+        for location, rider_list in riders_by_location.items():
+            body += '<p style="margin-bottom: 5px;"><strong>📍 ' + location + '</strong></p>'
+            body += '<ul style="list-style-type: none; padding-left: 20px; margin-top: 5px; margin-bottom: 15px;">'
+            for rider in rider_list:
+                body += '<li style="margin-bottom: 5px;">' + rider['name'] + " - (" + rider['phone'] + ") "
+                if rider['notes']:
+                    body += ' <em style="color: #666;">– Note: ' + rider['notes'] + '</em>'
+                body += '</li>'
+            body += '</ul>'
+        
+        body += f"""
     </div>
 
     <p style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; font-size: 12px;">
