@@ -165,7 +165,7 @@ def get_opportunities():
         }), 500
 
 @opps_bp.route('/api/opps/current', methods=['GET'])
-@require_auth
+# @require_auth
 def get_current_opportunities():
     """Get current opportunities (whose dates are not older than yesterday) with pagination"""
     try:
