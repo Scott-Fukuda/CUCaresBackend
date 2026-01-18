@@ -39,7 +39,7 @@ def service_opps(user_id):
             "duration": duration,
             "attended": attended
         }
-        for name, date, driving, host_user_id, duration, attended in rows
+        for id, name, date, driving, host_user_id, duration, attended in rows
     ]
 
     return jsonify(result), 200
