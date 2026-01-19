@@ -507,7 +507,7 @@ def update_opportunity(opp_id):
                     setattr(opp, field, data[field])
         db.session.flush() 
         
-        if data['allow_carpool'] and not init_allow_carpool:
+        if data.get('allow_carpool') and not init_allow_carpool:
             add_carpool(opp, 'opp')
         
         # Commit all changes
