@@ -15,6 +15,7 @@ def service_opps(user_id):
     # Query only the columns you need — no model overhead
     rows = (
         db.session.query(
+            Opportunity.id,
             Opportunity.name,
             Opportunity.date,
             UserOpportunity.driving,
@@ -30,6 +31,7 @@ def service_opps(user_id):
     # Convert results to JSON-serializable dicts
     result = [
         {
+            "id": id,
             "name": name,
             "date": date,
             "driver": driving,
@@ -37,7 +39,7 @@ def service_opps(user_id):
             "duration": duration,
             "attended": attended
         }
-        for name, date, driving, host_user_id, duration, attended in rows
+        for id, name, date, driving, host_user_id, duration, attended in rows
     ]
 
     return jsonify(result), 200
@@ -51,6 +53,7 @@ def service_opps_csv(user_id):
     # Query only the needed columns efficiently
     stmt = (
         select(
+            Opportunity.id,
             Opportunity.name,
             Opportunity.date,
             UserOpportunity.driving,
@@ -66,10 +69,11 @@ def service_opps_csv(user_id):
     # Create an in-memory CSV
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["name", "date", "driver", "host", "duration", "attended"])  # header row
+    writer.writerow(["id", "name", "date", "driver", "host", "duration", "attended"])  # header row
 
-    for name, date, driving, host_user_id, duration, attended in rows:
+    for id, name, date, driving, host_user_id, duration, attended in rows:
         writer.writerow([
+            id,
             name,
             date.isoformat() if date else "",
             "true" if driving else "false",

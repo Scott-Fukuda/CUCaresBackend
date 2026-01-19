@@ -1,5 +1,9 @@
 import os
 from dotenv import load_dotenv
+
+# Load environment variables from .env file FIRST
+load_dotenv()
+
 from flask_migrate import Migrate
 from config import StagingConfig
 from extensions.cors import init_cors
