@@ -224,7 +224,7 @@ def update_multiopp(multiopp_id):
 
 # 🟡 GET ALL multiopps
 @multiopp_bp.route("/api/multiopps", methods=["GET"])
-@require_auth
+# @require_auth
 def get_all_multiopps():
     multiopps = MultiOpportunity.query.all()
     return jsonify([m.serialize() for m in multiopps]), 200
