@@ -301,7 +301,7 @@ class Opportunity(db.Model):
 
     user_opportunities = db.relationship('UserOpportunity', back_populates='opportunity', cascade="all", passive_deletes=True)
     carpool = db.relationship("Carpool", back_populates="opportunity", cascade="all, delete-orphan", passive_deletes=True, uselist=False)
-    multiopp_id = db.Column(db.Integer, db.ForeignKey("multi_opportunity.id"), nullable=True)
+    multiopp_id = db.Column(db.Integer, db.ForeignKey("multi_opportunity.id", ondelete="CASCADE"), nullable=True)
     multi_opportunity = db.relationship("MultiOpportunity", back_populates="opportunities")
 
     def __init__(self, **kwargs):
@@ -458,7 +458,7 @@ class MultiOpportunity(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
     opportunities = db.relationship(
-        "Opportunity", back_populates="multi_opportunity", cascade="all"
+        "Opportunity", back_populates="multi_opportunity", cascade="all", passive_deletes=True
     )
 
     def serialize(self):
@@ -520,7 +520,7 @@ class Carpool(db.Model):
 class RideRider(db.Model):
     __tablename__ = "ride_riders"
     id = db.Column(db.Integer, primary_key=True)
-    ride_id = db.Column(db.Integer, db.ForeignKey("ride.id"), nullable=False)
+    ride_id = db.Column(db.Integer, db.ForeignKey("ride.id", ondelete="CASCADE"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     pickup_location = db.Column(db.String, nullable=False)
     notes = db.Column(db.String, nullable=True)
@@ -542,11 +542,11 @@ class RideRider(db.Model):
 class Ride(db.Model):
     __tablename__ = "ride"
     id = db.Column(db.Integer, primary_key=True)
-    carpool_id = db.Column(db.Integer, db.ForeignKey("carpool.id"), nullable=False)
+    carpool_id = db.Column(db.Integer, db.ForeignKey("carpool.id", ondelete="CASCADE"), nullable=False)
     driver_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
 
     carpool = db.relationship("Carpool", back_populates="rides")
-    ride_riders = db.relationship("RideRider", back_populates="ride", cascade="all, delete-orphan")
+    ride_riders = db.relationship("RideRider", back_populates="ride", cascade="all, delete-orphan", passive_deletes=True)
     driver = db.relationship("User", foreign_keys=[driver_id])
 
     def serialize(self):

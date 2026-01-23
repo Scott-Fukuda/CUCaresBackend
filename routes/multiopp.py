@@ -244,11 +244,6 @@ def get_multiopp(multiopp_id):
 def delete_multiopp(multiopp_id):
     multiopp = MultiOpportunity.query.get_or_404(multiopp_id)
 
-    # Delete all linked individual opportunities first to avoid foreign key issues
-    opportunities = Opportunity.query.filter_by(multiopp_id=multiopp_id).all()
-    for opp in opportunities:
-        db.session.delete(opp)
-    
     db.session.delete(multiopp)
     db.session.commit()
     return jsonify({"message": f"MultiOpportunity {multiopp_id} deleted successfully."})
