@@ -244,9 +244,11 @@ def get_multiopp(multiopp_id):
 def delete_multiopp(multiopp_id):
     multiopp = MultiOpportunity.query.get_or_404(multiopp_id)
 
-    # Optional: Delete all linked individual opportunities first, if cascade isn’t set up
-   
-
+    # Delete all linked individual opportunities first to avoid foreign key issues
+    opportunities = Opportunity.query.filter_by(multiopp_id=multiopp_id).all()
+    for opp in opportunities:
+        db.session.delete(opp)
+    
     db.session.delete(multiopp)
     db.session.commit()
     return jsonify({"message": f"MultiOpportunity {multiopp_id} deleted successfully."})
@@ -513,3 +515,156 @@ def remap_opportunity_slots_compact(multiopp_id):
             "new_days_of_week": multiopp.days_of_week
         }
     }), 200
+
+# @multiopp_bp.route("/api/multiopps/<int:multiopp_id>/add_recurrences", methods=["POST"])
+# @require_auth
+# def add_recurrences_to_multiopp(multiopp_id):
+#     """
+#     Add additional recurrences (weeks) to an existing MultiOpportunity.
+#     Expects JSON: { "additional_weeks": int }
+#     This will increase week_recurrences and generate new opportunities starting from the next week.
+#     """
+#     try:
+#         multiopp = MultiOpportunity.query.get_or_404(multiopp_id)
+        
+#         data = request.get_json(force=True, silent=True)
+#         if not data or "additional_weeks" not in data:
+#             return jsonify({"error": "Request must include 'additional_weeks' (integer)."}), 400
+        
+#         additional_weeks = int(data["additional_weeks"])
+#         if additional_weeks <= 0:
+#             return jsonify({"error": "'additional_weeks' must be a positive integer."}), 400
+        
+#         # Find the maximum week_index already generated
+#         existing_opps = Opportunity.query.filter_by(multiopp_id=multiopp_id).all()
+#         if not existing_opps:
+#             return jsonify({"error": "No existing opportunities found for this MultiOpportunity."}), 400
+        
+#         # Calculate the max week_index from existing opportunities
+#         eastern = pytz.timezone("US/Eastern")
+#         start_date = multiopp.start_date
+#         max_week_index = 0
+#         for opp in existing_opps:
+#             if opp.date:
+#                 local_date = opp.date.astimezone(eastern).date()
+#                 weeks_diff = (local_date - start_date.date()).days // 7
+#                 max_week_index = max(max_week_index, weeks_diff)
+        
+#         # New total weeks
+#         new_total_weeks = max_week_index + 1 + additional_weeks
+#         multiopp.week_recurrences = new_total_weeks
+        
+#         # Generate new opportunities starting from max_week_index + 1
+#         new_opps = generate_additional_opportunities_from_multiopp(multiopp, data, start_week=max_week_index + 1, num_weeks=additional_weeks)
+        
+#         db.session.commit()
+        
+#         return jsonify({
+#             "message": f"Added {additional_weeks} weeks of recurrences to MultiOpportunity {multiopp_id}.",
+#             "multiopp": multiopp.serialize(),
+#             "new_opportunities": [opp.serialize() for opp in new_opps]
+#         }), 200
+        
+#     except Exception as e:
+#         db.session.rollback()
+#         print("Error in POST /api/multiopps/<id>/add_recurrences:")
+#         traceback.print_exc()
+#         return jsonify({
+#             'message': 'Failed to add recurrences',
+#             'error': str(e)
+#         }), 500
+
+# def generate_additional_opportunities_from_multiopp(multiopp: MultiOpportunity, data: dict, start_week: int, num_weeks: int):
+#     """Generate additional opportunities from a MultiOpportunity starting from a specific week."""
+#     from datetime import datetime, timedelta
+#     import pytz
+
+#     all_opps = []
+#     start_date = multiopp.start_date
+
+#     eastern = pytz.timezone("US/Eastern")
+
+#     # Flatten day/time mapping list into (weekday, [(time_str, duration), ...]) pairs
+#     day_time_pairs = []
+#     for entry in multiopp.days_of_week:
+#         for weekday, time_list in entry.items():
+#             day_time_pairs.append((weekday, time_list))
+
+#     week_frequency = multiopp.week_frequency or 1
+
+#     for week_offset in range(num_weeks):
+#         week_index = start_week + week_offset
+#         # Handle every Nth week (e.g., every 2 weeks)
+#         if week_frequency > 1 and week_index % week_frequency != 0:
+#             continue
+
+#         base_week_start = start_date + timedelta(weeks=week_index)
+
+#         for weekday_name, time_list in day_time_pairs:
+#             weekday_index = [
+#                 "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
+#             ].index(weekday_name)
+#             day_date = base_week_start + timedelta(days=(weekday_index - base_week_start.weekday()) % 7)
+
+#             for time_entry in time_list:
+#                 # Each entry is a tuple or list: (start_time_str, duration)
+#                 if isinstance(time_entry, (list, tuple)) and len(time_entry) == 2:
+#                     start_time_str, duration = time_entry
+#                 else:
+#                     start_time_str, duration = time_entry, 60
+
+#                 # Parse "HH:MM" or ISO "T" time
+#                 start_time = (
+#                     datetime.fromisoformat(start_time_str).time()
+#                     if "T" in start_time_str
+#                     else datetime.strptime(start_time_str, "%H:%M").time()
+#                 )
+
+#                 # Combine with date (naive datetime)
+#                 naive_dt = datetime.combine(day_date.date(), start_time)
+
+#                 # ✅ Localize to Eastern time, then convert to UTC for DB storage
+#                 localized_dt = eastern.localize(naive_dt)
+#                 dt_utc = localized_dt.astimezone(pytz.utc)
+#                 allow_carpool = data.get('allow_carpool', 'false').lower() == "true"
+
+#                 opp = Opportunity(
+#                     name=data.get("name", multiopp.name),
+#                     description=data.get("description", multiopp.description),
+#                     causes=data.get("causes", multiopp.causes),
+#                     tags=data.get("tags", multiopp.tags),
+#                     address=data.get("address", multiopp.address),
+#                     nonprofit=data.get("nonprofit", multiopp.nonprofit),
+#                     image=data.get("image", multiopp.image),
+#                     approved=data.get("approved", multiopp.approved),
+#                     host_org_name=data.get("host_org_name", multiopp.host_org_name),
+#                     qualifications=data.get("qualifications", multiopp.qualifications),
+#                     visibility=data.get("visibility", multiopp.visibility),
+#                     host_org_id=data.get("host_org_id", multiopp.host_org_id),
+#                     host_user_id=data.get("host_user_id", multiopp.host_user_id),
+#                     redirect_url=data.get("redirect_url", multiopp.redirect_url),
+#                     total_slots=data.get("total_slots", multiopp.total_slots),
+#                     allow_carpool=allow_carpool,
+
+#                     # Recurrence-specific fields
+#                     date=dt_utc,  # store in UTC
+#                     duration=duration,
+#                     recurring="recurring",
+#                     comments=[],
+#                     attendance_marked=False,
+#                     actual_runtime=None,
+
+#                     # Relationship
+#                     multiopp_id=multiopp.id,
+#                     multi_opportunity=multiopp,
+#                 )
+
+#                 db.session.add(opp)
+#                 all_opps.append(opp)
+#                 db.session.flush() 
+
+#                 if allow_carpool:
+#                     add_carpool(opp, 'multiopp')
+
+#     db.session.commit()
+#     return all_opps
