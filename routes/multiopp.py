@@ -125,6 +125,7 @@ def create_multiopp():
                 data["visibility"] = json.loads(request.form["visibility"])
 
 
+
         # Step 1: Create MultiOpportunity (recurrence definition)
         multiopp = MultiOpportunity(
             name=data["name"],
@@ -164,7 +165,7 @@ def create_multiopp():
         print("Error in /api/multiopps:")
         traceback.print_exc()
         return jsonify({
-            'message': 'Failed to create carpool',
+            'message': 'Failed to create multiopp',
             'error': str(e)
         }), 500
 
