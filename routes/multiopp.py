@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 from operator import and_
 import traceback
 from flask import Blueprint, jsonify, make_response, request, Response
@@ -143,8 +143,7 @@ def create_multiopp():
             host_user_id=data.get("host_user_id"),
             redirect_url=data.get("redirect_url"),
             total_slots=data.get("total_slots"),
-
-            start_date=datetime.datetime.fromisoformat(data["start_date"]),
+            start_date=datetime.fromisoformat(data["start_date"]),
             days_of_week=data["days_of_week"],
             week_frequency=data.get("week_frequency"),
             week_recurrences=data.get("week_recurrences", 4)

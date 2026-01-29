@@ -1,6 +1,6 @@
 from services.s3_client import s3, S3_BUCKET
 import pytz
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 # File upload configuration
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
@@ -36,17 +36,24 @@ def save_opportunity_image(file, opportunity_id):
     
     return None
 
+
 def format_datetime(dt_input, multiopp_id):
     """Format a datetime from the database (assume UTC) to US/Eastern local time."""
-    dt_est = dt_input
     print(f"id: {multiopp_id}")
-    if multiopp_id:
-        print("yuper")
+    print(f"Raw dt_input: {dt_input}")
+    print(f"dt_input.tzinfo: {dt_input.tzinfo}")
+    
+    if dt_input.tzinfo is None:
         dt_utc = pytz.utc.localize(dt_input)
-        eastern = pytz.timezone('US/Eastern')
-        dt_est = dt_utc.astimezone(eastern)
     else:
-        dt_est = dt_input - timedelta(hours=4)
+        dt_utc = dt_input.astimezone(pytz.utc)
+    
+    print(f"After UTC conversion: {dt_utc}")
+    
+    eastern = pytz.timezone('US/Eastern')
+    dt_est = dt_utc.astimezone(eastern)
+    
+    print(f"After Eastern conversion: {dt_est}")
 
     short_format = dt_est.strftime('%-m/%-d/%y')  
     formal_format = dt_est.strftime('%B %-d, %Y, %-I:%M %p')  
