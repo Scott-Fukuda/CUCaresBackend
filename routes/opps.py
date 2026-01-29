@@ -8,12 +8,13 @@ from services.carpool_service import add_carpool
 import json
 import io, csv
 from services.gcal_service import generate_ics, send_calendar_invite
+import pytz
 
 opps_bp = Blueprint("opps", __name__)
 
 def send_gcal_invite(opp, user):
     # UTC
-    start = opp.date.replace(tzinfo=timezone.utc) + timedelta(hours=1)
+    start = opp.date.replace(tzinfo=timezone.utc) 
     end = start + timedelta(minutes=opp.duration)
 
     ics = generate_ics(
@@ -97,7 +98,9 @@ def create_opportunity():
                     'message': 'Invalid date format. Use YYYY-MM-DDTHH:MM:SS or YYYY-MM-DDTHH:MM'
                 }), 400
         
-        gmt_date = parsed_date + timedelta(hours=4)
+        eastern = pytz.timezone("US/Eastern")
+        localized_dt = eastern.localize(parsed_date)
+        gmt_date = localized_dt.astimezone(pytz.utc)
 
 
         # admin users can create approved opps
@@ -430,9 +433,10 @@ def update_opportunity(opp_id):
                 if field in request.form:
                     data[field] = request.form[field]
                 if field == 'date':
-                    new_date = datetime.strptime(request.form[field], '%Y-%m-%dT%H:%M:%S') # converts to datetime object
-                    new_date = new_date + timedelta(hours=4)
-                    setattr(opp, field, new_date)
+                    parsed_date = datetime.strptime(request.form[field], '%Y-%m-%dT%H:%M:%S')
+                    eastern = pytz.timezone("US/Eastern")
+                    localized_dt = eastern.localize(parsed_date)
+                    new_date = localized_dt.astimezone(pytz.utc)
             
             # Handle image upload
             if 'image' in request.files:
@@ -464,7 +468,9 @@ def update_opportunity(opp_id):
                             return jsonify({
                                 'message': 'Invalid date format. Use YYYY-MM-DDTHH:MM:SS or YYYY-MM-DDTHH:MM'
                             }), 400
-                    new_date = new_date.replace(tzinfo=timezone(timedelta(hours=-4)))
+                    eastern = pytz.timezone("US/Eastern")
+                    localized_dt = eastern.localize(new_date)
+                    new_date = localized_dt.astimezone(pytz.utc)
                     setattr(opp, field, new_date)
                 elif(field == 'host_org_id'): # if host org changes, update this in other models
                     new_host_org_id = data['host_org_id']
