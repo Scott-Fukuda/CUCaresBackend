@@ -301,7 +301,7 @@ class Opportunity(db.Model):
 
     user_opportunities = db.relationship('UserOpportunity', back_populates='opportunity', cascade="all", passive_deletes=True)
     carpool = db.relationship("Carpool", back_populates="opportunity", cascade="all, delete-orphan", passive_deletes=True, uselist=False)
-    multiopp_id = db.Column(db.Integer, db.ForeignKey("multi_opportunity.id", ondelete="CASCADE"), nullable=True)
+    multiopp_id = db.Column(db.Integer, db.ForeignKey("multi_opportunity.id", ondelete="SET NULL"), nullable=True)
     multi_opportunity = db.relationship("MultiOpportunity", back_populates="opportunities")
 
     def __init__(self, **kwargs):
@@ -458,7 +458,7 @@ class MultiOpportunity(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
     opportunities = db.relationship(
-        "Opportunity", back_populates="multi_opportunity", cascade="all", passive_deletes=True
+        "Opportunity", back_populates="multi_opportunity", passive_deletes=True
     )
 
     def serialize(self):
