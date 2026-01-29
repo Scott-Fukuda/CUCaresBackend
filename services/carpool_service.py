@@ -12,11 +12,7 @@ def add_carpool(opportunity, type):
     db.session.add(new_carpool)
     db.session.commit()
 
-    event_dt = opportunity.date
-    if type == 'opp':
-        event_dt -= timedelta(hours=4) + timedelta(hours=12) - timedelta(hours=7)
-    elif type == 'multiopp':
-        event_dt= pytz.utc.localize(event_dt)
+    event_dt = pytz.utc.localize(opportunity.date)
 
     try: 
         schedule_carpool_email(opportunity.id, event_dt)
@@ -32,7 +28,8 @@ def create_driver_email_body(ride, riders, opportunity, time_data):
 <p>Hi {rider.driver.name},</p>
 """
     
-    if not riders:
+    riders_list = list(riders)
+    if not riders_list:
         plain_body += f"""
 Thank you for signing up to volunteer for the upcoming CampusCares event, {opportunity.name}!
 
