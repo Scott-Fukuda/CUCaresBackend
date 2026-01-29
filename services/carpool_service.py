@@ -25,7 +25,7 @@ def create_driver_email_body(ride, riders, opportunity, time_data):
     """
     body = f"""<html>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
-<p>Hi {rider.driver.name},</p>
+<p>Hi {ride.driver.name},</p>
 """
     
     riders_list = list(riders)
