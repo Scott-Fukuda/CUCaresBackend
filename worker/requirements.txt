@@ -4,4 +4,8 @@ requests
 pytz
 python-dotenv
 tabulate
-# plus any other packages your tasks.py, mailgun.py, queues.py need
+gunicorn
+Flask
+flask-cors
+Flask-SQLAlchemy
+psycopg2-binary
