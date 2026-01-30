@@ -24,6 +24,12 @@ def send_carpool_email_endpoint():
         if not opportunity_id:
             return jsonify({'error': 'Missing opportunity_id'}), 400
         
+        # Convert to int explicitly
+        try:
+            opportunity_id = int(opportunity_id)
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid opportunity_id format'}), 400
+        
         # Import your models
         from shared import Opportunity, Carpool, Ride, Car
         
