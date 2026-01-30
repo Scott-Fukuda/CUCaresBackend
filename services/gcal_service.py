@@ -3,7 +3,7 @@ import uuid
 import requests
 import os 
 
-MAILGUN_DOMAIN = os.getenv("MG_DOMAIN")
+MAILGUN_DOMAIN = "mg.campuscares.us"
 MAILGUN_API_KEY = os.getenv("MG_API_KEY")
 
 def generate_ics(
