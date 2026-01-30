@@ -307,10 +307,10 @@ class Opportunity(db.Model):
     def __init__(self, **kwargs):
         self.name = kwargs.get("name")
         self.description = kwargs.get("description")
-        self.date = kwargs.get("date")
+        self.date = kwargs.get("date") 
         self.duration = kwargs.get("duration") # duration in mintues
         self.causes = kwargs.get("causes", [])
-        self.tags = kwargs.get("tags", [])
+        self.tags = kwargs.get("tags", []) 
         self.address = kwargs.get("address")
         self.nonprofit = kwargs.get("nonprofit")
         self.total_slots = kwargs.get("total_slots")
