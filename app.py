@@ -86,6 +86,16 @@ def serve_react(path):
     # Otherwise, serve index.html for React Router
     return send_from_directory(app.static_folder, 'index.html')
 
+# Add this after all your blueprint registrations and before the serve_react route
+
+@app.route('/api/health')
+def health_check():
+    return {
+        'status': 'ok',
+        'environment': env,
+        'git_commit': os.environ.get('RENDER_GIT_COMMIT', 'unknown')
+    }
+
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 8000))
     app.run(host="0.0.0.0", port=port, debug=False)
