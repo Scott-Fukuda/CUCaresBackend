@@ -5,7 +5,14 @@ from flask import Blueprint, jsonify, make_response, request, Response
 from utils.auth import require_auth
 from db import db, Opportunity, MultiOpportunity
 from services.carpool_service import add_carpool
+from services.email_service import add_email
 import json
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+env = os.environ.get("MY_ENV", "production")
 
 multiopp_bp = Blueprint("multiopp", __name__)
 
@@ -97,6 +104,9 @@ def generate_opportunities_from_multiopp(multiopp: MultiOpportunity, data: dict)
                 db.session.add(opp)
                 all_opps.append(opp)
                 db.session.flush() 
+
+                if env == 'staging':
+                    add_email(opp)
 
                 if allow_carpool:
                     add_carpool(opp, 'multiopp')

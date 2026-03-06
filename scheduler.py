@@ -47,6 +47,37 @@ def schedule_carpool_email(opportunity_id, event_dt):
         print(f"[ERROR] Failed to schedule email: {str(e)}")
         raise
 
+def schedule_form_email(opportunity_id, event_end_dt):
+    """
+    Schedule feedback form email
+    """
+    
+    iso = event_end_dt.isoformat()
+    print(f"[INFO] Event end date time: {event_end_dt.isoformat()}")
+    print(f"[INFO] Event send time: {iso}")
+    
+    try:
+        response = requests.post(
+            f"{CLOUDFLARE_WORKER_URL}/api/schedule-email",
+            json={
+                "opportunity_id": opportunity_id,
+                "event_datetime": iso,
+                "email_type": "form"
+            },
+            timeout=10
+        )
+        
+        response.raise_for_status()
+        result = response.json()
+        
+        print(f"[SUCCESS] Scheduled email for opportunity {opportunity_id}")
+        print(f"[DEBUG] Send time: {result.get('send_time')}")
+        
+        return result
+        
+    except requests.exceptions.RequestException as e:
+        print(f"[ERROR] Failed to schedule email: {str(e)}")
+        raise
 
 def cancel_scheduled_email(opportunity_id):
     """
