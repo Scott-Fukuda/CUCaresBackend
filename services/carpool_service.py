@@ -1,6 +1,6 @@
 from collections import defaultdict
 from scheduler import schedule_carpool_email
-from datetime import timedelta
+from datetime import timedelta, timezone
 from db import db, Carpool
 import pytz
 
@@ -12,7 +12,10 @@ def add_carpool(opportunity, type):
     db.session.add(new_carpool)
     db.session.commit()
 
-    event_dt = pytz.utc.localize(opportunity.date)
+    event_dt = opportunity.date
+
+    if event_dt.tzinfo is None:
+        event_dt = event_dt.replace(tzinfo=timezone.utc)
 
     try: 
         schedule_carpool_email(opportunity.id, event_dt)
@@ -21,11 +24,13 @@ def add_carpool(opportunity, type):
 
 
 def create_driver_email_body(ride, riders, opportunity, time_data):
-    plain_body = f"""Hi {ride.driver.name},
+    first_name = ride.driver.name.split(" ")[0]
+
+    plain_body = f"""Hi {first_name},
     """
     body = f"""<html>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
-<p>Hi {ride.driver.name},</p>
+<p>Hi {first_name},</p>
 """
     
     riders_list = list(riders)
@@ -157,7 +162,9 @@ CampusCares Team
     return body, plain_body
 
 def create_rider_email_body(ride, rider, car, riders, opportunity, time_data):
-    plain_body = f"""Hi {rider.user.name},
+    first_name = rider.user.name.split(" ")[0]
+
+    plain_body = f"""Hi {first_name},
 
 Thank you for signing up to volunteer for the upcoming CampusCares event! Here are the details for your carpool:
 
@@ -196,7 +203,7 @@ CampusCares Team
 
     body = f"""<html>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
-    <p>Hi {rider.user.name},</p>
+    <p>Hi {first_name},</p>
 
     <p>Thank you for signing up to volunteer for the upcoming CampusCares event! Below are your carpool details:</p>
 

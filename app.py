@@ -11,7 +11,7 @@ from extensions.firebase import init_firebase
 from flask import Flask, send_from_directory
 from db import db
 from routes.users import users_bp 
-from routes.carpool import carpool_bp 
+from routes.worker import worker_bp 
 from routes.cars import cars_bp 
 from routes.emails import emails_bp 
 from routes.friends import friends_bp 
@@ -29,7 +29,7 @@ db_filename = "cucares.db"
 app = Flask(__name__, static_folder='build', static_url_path='')
 
 app.register_blueprint(users_bp)
-app.register_blueprint(carpool_bp)
+app.register_blueprint(worker_bp)
 app.register_blueprint(cars_bp)
 app.register_blueprint(emails_bp)
 app.register_blueprint(friends_bp)
@@ -43,9 +43,6 @@ app.register_blueprint(setup_bp)
 app.register_blueprint(waivers_bp)
 
 env = os.environ.get("MY_ENV", "production")
-
-# Load environment variables from .env file
-load_dotenv()
 
 app.secret_key = os.environ["FLASK_SECRET_KEY"]
 init_cors(app, env)

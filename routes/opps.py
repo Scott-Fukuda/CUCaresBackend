@@ -5,10 +5,17 @@ from datetime import datetime, timedelta, timezone
 from utils.helper import paginate, save_opportunity_image
 from scheduler import cancel_scheduled_email
 from services.carpool_service import add_carpool
+from services.email_service import add_email
 import json
 import io, csv
 from services.gcal_service import generate_ics, send_calendar_invite
 import pytz
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+env = os.environ.get("MY_ENV", "production")
 
 opps_bp = Blueprint("opps", __name__)
 
@@ -141,6 +148,9 @@ def create_opportunity():
         )
         db.session.add(new_opportunity)
         db.session.flush() 
+        
+        if env == 'staging':
+            add_email(new_opportunity)
 
         if allow_carpool:
             add_carpool(new_opportunity, 'opp')
