@@ -138,7 +138,9 @@ def send_form_email_endpoint():
         
         print(f"OPP: {opportunity}")
         print(f"MULTIOPP ID: {opportunity.multiopp_id}")
-        
+
+        emails_sent = 0
+
         for user in users:
             body, plain_body = create_feedback_email_body(user, opportunity)
             response = requests.post(
@@ -163,6 +165,6 @@ def send_form_email_endpoint():
         }), 200
         
     except Exception as e:
-        print(f"Error sending carpool email: {str(e)}")
+        print(f"Error sending form email: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
