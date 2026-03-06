@@ -149,7 +149,7 @@ def send_form_email_endpoint():
                 data={
                     "from": f"CampusCares <postmaster@{DOMAIN}>",
                     "to": user.email,
-                    "subject": "Thank You for Volunteering – We'd Love Your Feedback!",
+                    "subject": "Thank You for Volunteering - We'd Love Your Feedback!",
                     "text": plain_body,
                     "html": body
                 }
