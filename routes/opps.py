@@ -158,7 +158,7 @@ def create_opportunity():
         user_opportunity = UserOpportunity(
                         user_id=data['host_user_id'],
                         opportunity_id=new_opportunity.id,
-                        registered=False, # Host is initially not registered
+                        registered=True, 
                         attended=False  # Match your model field spelling
                     )
         db.session.add(user_opportunity)
