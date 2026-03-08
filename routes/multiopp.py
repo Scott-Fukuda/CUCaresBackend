@@ -105,8 +105,7 @@ def generate_opportunities_from_multiopp(multiopp: MultiOpportunity, data: dict)
                 all_opps.append(opp)
                 db.session.flush() 
 
-                if env == 'staging':
-                    add_email(opp)
+                add_email(opp)
 
                 if allow_carpool:
                     add_carpool(opp, 'multiopp')
