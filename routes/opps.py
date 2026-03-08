@@ -149,8 +149,7 @@ def create_opportunity():
         db.session.add(new_opportunity)
         db.session.flush() 
         
-        if env == 'staging':
-            add_email(new_opportunity)
+        add_email(new_opportunity)
 
         if allow_carpool:
             add_carpool(new_opportunity, 'opp')
