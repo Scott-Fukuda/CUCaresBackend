@@ -1,7 +1,11 @@
 ## General emails (not carpool email)
 from scheduler import schedule_form_email
 from datetime import timedelta, timezone
-import pytz
+import requests
+import os
+
+MAILGUN_API_KEY = os.environ["MG_API_KEY"]
+DOMAIN = "mg.campuscares.us"
 
 def add_email(opportunity):
     """Schedule email in redis"""
@@ -18,6 +22,65 @@ def add_email(opportunity):
     except Exception as e:
         print("Error:", e)
 
+def send_approve_opp_email(host, opportunity):
+    """Send direct email through mailgun"""
+
+    # admin_emails = ["ejm376@cornell.edu", "sdf72@cornell.edu", "lpb42@cornell.edu"]
+
+    # TEST
+    admin_emails = ["glm86@cornell.edu"]
+
+    body, plain_body = create_approve_opp_email(host, opportunity)
+
+    for email in admin_emails:
+      response = requests.post(
+          f"https://api.mailgun.net/v3/{DOMAIN}/messages",
+          auth=("api", MAILGUN_API_KEY),
+          data={
+              "from": f"CampusCares <postmaster@{DOMAIN}>",
+              "to": email,
+              "subject": "New Event Pending Your Approval",
+              "text": plain_body,
+              "html": body
+          }
+      )
+
+def create_approve_opp_email(host, opportunity):
+    plain_body = f"""Hi,
+
+A new event {opportunity.name} has been submitted by {host.name} and is waiting for your approval.
+
+Please log in to the admin page to review and approve or reject the event.
+
+[Review Event →]
+https://www.campuscares.us/admin
+
+Thanks
+"""
+    body = f"""
+<html>
+  <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
+    <p>Hi,</p>
+
+    <p>
+      A new event {opportunity.name} has been submitted by {host.name} and is waiting for your approval.
+    </p>
+
+    <p>
+      Please log in to the admin page to review and approve or reject the event.
+    </p>
+
+    <a href="https://www.campuscares.us/admin">
+      <b>[Review Event →]</b>
+    </a>
+
+    <p>
+      Thanks
+    </p>
+  </body>
+</html>
+"""
+    return body, plain_body
 
 def create_feedback_email_body(user, opportunity):
     first_name = user.name.split(" ")[0]
