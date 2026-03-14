@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from utils.helper import paginate, save_opportunity_image
 from scheduler import cancel_scheduled_email
 from services.carpool_service import add_carpool
-from services.email_service import add_email
+from services.email_service import add_email, send_approve_opp_email
 import json
 import io, csv
 from services.gcal_service import generate_ics, send_calendar_invite
@@ -149,7 +149,12 @@ def create_opportunity():
         db.session.add(new_opportunity)
         db.session.flush() 
         
+        # Schedule feedback form email
         add_email(new_opportunity)
+
+        # Send email to have admin approve opportunity
+        if not host_user.admin:
+            send_approve_opp_email(host_user, new_opportunity)
 
         if allow_carpool:
             add_carpool(new_opportunity, 'opp')

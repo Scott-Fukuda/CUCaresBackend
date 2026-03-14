@@ -24,38 +24,50 @@ def add_email(opportunity):
 
 def send_approve_opp_email(host, opportunity):
     """Send direct email through mailgun"""
+    try:
+      # admin_emails = ["ejm376@cornell.edu", "sdf72@cornell.edu", "lpb42@cornell.edu"]
 
-    # admin_emails = ["ejm376@cornell.edu", "sdf72@cornell.edu", "lpb42@cornell.edu"]
+      # TEST
+      admin_emails = ["glm86@cornell.edu"]
 
-    # TEST
-    admin_emails = ["glm86@cornell.edu"]
+      body, plain_body = create_approve_opp_email(host, opportunity)
 
-    body, plain_body = create_approve_opp_email(host, opportunity)
+      for email in admin_emails:
+        response = requests.post(
+            f"https://api.mailgun.net/v3/{DOMAIN}/messages",
+            auth=("api", MAILGUN_API_KEY),
+            data={
+                "from": f"CampusCares <postmaster@{DOMAIN}>",
+                "to": email,
+                "subject": "New Event Pending Your Approval",
+                "text": plain_body,
+                "html": body
+            }
+        )
 
-    for email in admin_emails:
-      response = requests.post(
-          f"https://api.mailgun.net/v3/{DOMAIN}/messages",
-          auth=("api", MAILGUN_API_KEY),
-          data={
-              "from": f"CampusCares <postmaster@{DOMAIN}>",
-              "to": email,
-              "subject": "New Event Pending Your Approval",
-              "text": plain_body,
-              "html": body
-          }
-      )
+        response.raise_for_status()
+        result = response.json()
+        
+        print(f"[SUCCESS] Sent email to approve for for opportunity {opportunity.id}")
+        
+        return result
+
+    except requests.exceptions.RequestException as e:
+        print(f"[ERROR] Failed to send approval email: {str(e)}")
+        raise
+        
 
 def create_approve_opp_email(host, opportunity):
     plain_body = f"""Hi,
 
-A new event {opportunity.name} has been submitted by {host.name} and is waiting for your approval.
+A new event, {opportunity.name}, has been submitted by {host.name} and is waiting for your approval.
 
 Please log in to the admin page to review and approve or reject the event.
 
 [Review Event →]
 https://www.campuscares.us/admin
 
-Thanks
+Thank you!
 """
     body = f"""
 <html>
@@ -63,7 +75,7 @@ Thanks
     <p>Hi,</p>
 
     <p>
-      A new event {opportunity.name} has been submitted by {host.name} and is waiting for your approval.
+      A new event, {opportunity.name}, has been submitted by {host.name} and is waiting for your approval.
     </p>
 
     <p>
@@ -75,7 +87,7 @@ Thanks
     </a>
 
     <p>
-      Thanks
+      Thank you!
     </p>
   </body>
 </html>
