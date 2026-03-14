@@ -25,10 +25,7 @@ def add_email(opportunity):
 def send_approve_opp_email(host, opportunity):
     """Send direct email through mailgun"""
     try:
-      # admin_emails = ["ejm376@cornell.edu", "sdf72@cornell.edu", "lpb42@cornell.edu"]
-
-      # TEST
-      admin_emails = ["glm86@cornell.edu"]
+      admin_emails = ["ejm376@cornell.edu", "sdf72@cornell.edu", "lpb42@cornell.edu"]
 
       body, plain_body = create_approve_opp_email(host, opportunity)
 
