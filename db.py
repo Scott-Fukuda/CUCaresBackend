@@ -84,6 +84,8 @@ class User(db.Model):
     registration_date = db.Column(DateTime, nullable=False, default=datetime.datetime.utcnow) 
     carpool_waiver_signed = db.Column(db.Boolean, default=False)
 
+    heard_about = db.Column(db.String)
+
     multiopps_hosted = db.relationship("MultiOpportunity", back_populates="host_user")
 
     organizations = db.relationship(
@@ -137,6 +139,7 @@ class User(db.Model):
         self.bio = kwargs.get("bio", None)
         self.registration_date = kwargs.get("registration_date", datetime.datetime.utcnow())
         self.carpool_waiver_signed = kwargs.get("carpool_waiver_signed", False)
+        self.heard_about = kwargs.get("heard_about")
         self.multiopps_hosted = kwargs.get("multiopps_hosted", [])
 
 
@@ -158,6 +161,7 @@ class User(db.Model):
             "car_seats": self.car.seats if self.car else self.car_seats,
             "bio": self.bio,
             "registration_date": self.registration_date,
+            "heard_about": self.heard_about,
             "carpool_waiver_signed": self.carpool_waiver_signed,
             "organizations": [l.serialize() for l in self.organizations],
             "opportunities_hosted": [{"name": l.name} for l in self.opportunities_hosted], 
