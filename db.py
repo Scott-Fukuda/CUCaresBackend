@@ -83,6 +83,7 @@ class User(db.Model):
     bio = db.Column(db.String, nullable=True)
     registration_date = db.Column(DateTime, nullable=False, default=datetime.datetime.utcnow) 
     carpool_waiver_signed = db.Column(db.Boolean, default=False)
+    subscribed = db.Column(db.Boolean, default=True)
 
     heard_about = db.Column(db.String)
 
@@ -140,6 +141,7 @@ class User(db.Model):
         self.registration_date = kwargs.get("registration_date", datetime.datetime.utcnow())
         self.carpool_waiver_signed = kwargs.get("carpool_waiver_signed", False)
         self.heard_about = kwargs.get("heard_about")
+        self.subscribed = kwargs.get("subscribed", True)
         self.multiopps_hosted = kwargs.get("multiopps_hosted", [])
 
 
@@ -162,6 +164,7 @@ class User(db.Model):
             "bio": self.bio,
             "registration_date": self.registration_date,
             "heard_about": self.heard_about,
+            "subscribed": self.subscribed,
             "carpool_waiver_signed": self.carpool_waiver_signed,
             "organizations": [l.serialize() for l in self.organizations],
             "opportunities_hosted": [{"name": l.name} for l in self.opportunities_hosted], 
