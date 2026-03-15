@@ -83,7 +83,7 @@ class User(db.Model):
     bio = db.Column(db.String, nullable=True)
     registration_date = db.Column(DateTime, nullable=False, default=datetime.datetime.utcnow) 
     carpool_waiver_signed = db.Column(db.Boolean, default=False)
-    subscribed = db.Column(db.Boolean, default=True)
+    subscribed = db.Column(db.Boolean, nullable=False, default=True)
 
     heard_about = db.Column(db.String)
 
