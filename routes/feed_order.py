@@ -42,7 +42,8 @@ def get_feed_order():
             feed_order.order = order
             db.session.commit()
 
-    return jsonify({"order": order}), 200
+    invisible = feed_order.invisible_multiopps if feed_order else []
+    return jsonify({"order": order, "invisible_multiopps": invisible}), 200
 
 @feed_order_bp.route("/api/feed-order", methods=["PUT"])
 @require_auth
@@ -63,3 +64,29 @@ def update_feed_order():
 
     db.session.commit()
     return jsonify(feed_order.serialize()), 200
+
+@feed_order_bp.route("/api/feed-order/invisible-multiopps", methods=["GET"])
+@require_auth
+def get_invisible_multiopps():
+    feed_order = FeedOrder.query.first()
+    return jsonify({"invisible_multiopps": feed_order.invisible_multiopps if feed_order else []}), 200
+
+@feed_order_bp.route("/api/feed-order/invisible-multiopps", methods=["PUT"])
+@require_auth
+def update_invisible_multiopps():
+    body = request.get_json()
+    invisible = body.get("invisible_multiopps")
+    if invisible is None or not isinstance(invisible, list):
+        return jsonify({"error": "invisible_multiopps must be a list of multiopp ids"}), 400
+    if any(not isinstance(i, int) for i in invisible):
+        return jsonify({"error": "each item must be an integer id"}), 400
+
+    feed_order = FeedOrder.query.first()
+    if not feed_order:
+        feed_order = FeedOrder(order=[], invisible_multiopps=invisible)
+        db.session.add(feed_order)
+    else:
+        feed_order.invisible_multiopps = invisible
+
+    db.session.commit()
+    return jsonify({"invisible_multiopps": feed_order.invisible_multiopps}), 200
