@@ -563,11 +563,13 @@ class FeedOrder(db.Model):
     __tablename__ = "feed_order"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     order = db.Column(db.JSON, nullable=False, default=list)
+    invisible_multiopps = db.Column(db.JSON, nullable=False, default=list)
 
     def serialize(self):
         return {
             "id": self.id,
-            "order": self.order
+            "order": self.order,
+            "invisible_multiopps": self.invisible_multiopps
         }
 
 class Car(db.Model):
