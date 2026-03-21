@@ -23,6 +23,7 @@ from routes.rides import rides_bp
 from routes.service import service_bp 
 from routes.setup import setup_bp 
 from routes.waivers import waivers_bp
+from routes.feed_order import feed_order_bp
 
 # define db filename
 db_filename = "cucares.db"
@@ -41,6 +42,7 @@ app.register_blueprint(rides_bp)
 app.register_blueprint(service_bp)
 app.register_blueprint(setup_bp)
 app.register_blueprint(waivers_bp)
+app.register_blueprint(feed_order_bp)
 
 env = os.environ.get("MY_ENV", "production")
 
