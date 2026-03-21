@@ -559,6 +559,17 @@ class Ride(db.Model):
             "riders": [rider.serialize() for rider in self.ride_riders]
         }
 
+class FeedOrder(db.Model):
+    __tablename__ = "feed_order"
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    order = db.Column(db.JSON, nullable=False, default=list)
+
+    def serialize(self):
+        return {
+            "id": self.id,
+            "order": self.order
+        }
+
 class Car(db.Model):
     __tablename__ = "car"
     id = db.Column(db.Integer, primary_key=True)
