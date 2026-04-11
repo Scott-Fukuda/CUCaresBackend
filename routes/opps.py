@@ -1,3 +1,5 @@
+import logging
+
 from flask import Blueprint, request, jsonify, make_response
 from utils.auth import require_auth
 from db import db, User, Organization, Opportunity, UserOpportunity
@@ -5,7 +7,12 @@ from datetime import datetime, timedelta, timezone
 from utils.helper import paginate, save_opportunity_image
 from scheduler import cancel_scheduled_email
 from services.carpool_service import add_carpool
-from services.email_service import add_email, send_approve_opp_email
+from services.email_service import (
+    add_email,
+    send_approve_opp_email,
+    should_notify_host_late_unregister,
+    send_host_late_unregister_email,
+)
 import json
 import io, csv
 from services.gcal_service import generate_ics, send_calendar_invite
@@ -16,6 +23,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 env = os.environ.get("MY_ENV", "production")
+
+logger = logging.getLogger(__name__)
 
 opps_bp = Blueprint("opps", __name__)
 
@@ -663,9 +672,28 @@ def unregister_user_from_opportunity():
         }), 404
 
     try:
+        opp_start = opportunity.date
+        host_user_id = opportunity.host_user_id
         # Remove the association
         db.session.delete(existing)
         db.session.commit()
+        logger.info(
+            "unregister-opp ok opp_id=%s user_id=%s host_user_id=%s",
+            opportunity_id,
+            user_id,
+            host_user_id,
+        )
+        if host_user_id and should_notify_host_late_unregister(opp_start):
+            host = User.query.get(host_user_id)
+            if host and host.email:
+                logger.info(
+                    "unregister-opp late-notify: sending Mailgun to host email=%s",
+                    host.email,
+                )
+                try:
+                    send_host_late_unregister_email(host, opportunity, user)
+                except Exception as e:
+                    logger.exception("unregister-opp late-notify Mailgun failed: %s", e)
         return jsonify({"message": "Unregistration successful"}), 200
     except Exception as e:
         db.session.rollback()
