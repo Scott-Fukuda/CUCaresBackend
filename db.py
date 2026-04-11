@@ -83,6 +83,9 @@ class User(db.Model):
     bio = db.Column(db.String, nullable=True)
     registration_date = db.Column(DateTime, nullable=False, default=datetime.datetime.utcnow) 
     carpool_waiver_signed = db.Column(db.Boolean, default=False)
+    subscribed = db.Column(db.Boolean, nullable=False, default=True)
+
+    heard_about = db.Column(db.String)
 
     multiopps_hosted = db.relationship("MultiOpportunity", back_populates="host_user")
 
@@ -137,6 +140,8 @@ class User(db.Model):
         self.bio = kwargs.get("bio", None)
         self.registration_date = kwargs.get("registration_date", datetime.datetime.utcnow())
         self.carpool_waiver_signed = kwargs.get("carpool_waiver_signed", False)
+        self.heard_about = kwargs.get("heard_about")
+        self.subscribed = kwargs.get("subscribed", True)
         self.multiopps_hosted = kwargs.get("multiopps_hosted", [])
 
 
@@ -158,6 +163,8 @@ class User(db.Model):
             "car_seats": self.car.seats if self.car else self.car_seats,
             "bio": self.bio,
             "registration_date": self.registration_date,
+            "heard_about": self.heard_about,
+            "subscribed": self.subscribed,
             "carpool_waiver_signed": self.carpool_waiver_signed,
             "organizations": [l.serialize() for l in self.organizations],
             "opportunities_hosted": [{"name": l.name} for l in self.opportunities_hosted], 
@@ -563,11 +570,13 @@ class FeedOrder(db.Model):
     __tablename__ = "feed_order"
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     order = db.Column(db.JSON, nullable=False, default=list)
+    invisible_multiopps = db.Column(db.JSON, nullable=False, default=list)
 
     def serialize(self):
         return {
             "id": self.id,
-            "order": self.order
+            "order": self.order,
+            "invisible_multiopps": self.invisible_multiopps
         }
 
 class Car(db.Model):

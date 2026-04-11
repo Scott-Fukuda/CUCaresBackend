@@ -43,6 +43,7 @@ def create_user():
         # request.user contains: {'uid': 'firebase_uid', 'email': 'user@example.com', 'name': 'User Name', 'picture': 'profile_url'}
         authenticated_user = request.user
         print(f"Authenticated user: {authenticated_user}")
+        print("REQUEST JSON:", request.get_json())
         
         # Check if this is a multipart form (file upload) or JSON
         # Check if this is a multipart form (file upload) or JSON
@@ -89,7 +90,9 @@ def create_user():
                 'major': request.form.get('major'),
                 'birthday': request.form.get('birthday'),
                 'car_seats': car_seats,
-                'bio': request.form.get('bio')
+                'bio': request.form.get('bio'),
+                'heard_about': request.form.get('heard_about'),
+                'subscribed': True
             }
         else:
             # Handle JSON data
@@ -156,7 +159,9 @@ def create_user():
             academic_level=data.get('academic_level'),
             major=data.get('major'),
             birthday=birthday,
-            bio=data.get('bio')
+            bio=data.get('bio'),
+            heard_about=data.get('heard_about'),
+            subscribed=data.get('subscribed')
         )
         
         db.session.add(new_user)
@@ -181,6 +186,19 @@ def get_user_emails():
     except Exception as e:
         return jsonify({
             'message': 'Failed to fetch user emails',
+            'error': str(e)
+        }), 500
+
+@users_bp.route('/api/users/emails/subscribed', methods=['GET'])
+@require_auth
+def get_user_emails_subscribed():
+    """Get all subscribed user emails"""
+    try:
+        subscribed_users = User.query.filter_by(subscribed=True).all()
+        return jsonify([user.email for user in subscribed_users])
+    except Exception as e:
+        return jsonify({
+            'message': 'Failed to fetch subscribed user emails',
             'error': str(e)
         }), 500
 
@@ -308,7 +326,8 @@ def get_users_light():
                 User.admin,
                 User.phone,
                 User.points,
-                User.carpool_waiver_signed
+                User.carpool_waiver_signed,
+                User.subscribed
             ),
             db.joinedload(User.organizations).load_only(Organization.id)
         )
@@ -327,7 +346,8 @@ def get_users_light():
             "phone": u.phone,
             "organizationIds": [org.id for org in (u.organizations or [])],
             "points": u.points or 0,
-            "carpool_waiver_signed": u.carpool_waiver_signed
+            "carpool_waiver_signed": u.carpool_waiver_signed,
+            "subscribed": u.subscribed
         }
         for u in users
     ]
@@ -367,7 +387,7 @@ def update_user(user_id):
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Handle file upload
             data = {}
-            for field in ['name', 'car_seats', 'email', 'phone', 'points', 'admin', 'gender', 'graduation_year', 'academic_level', 'major', 'birthday', 'bio']:
+            for field in ['name', 'car_seats', 'email', 'phone', 'points', 'admin', 'gender', 'graduation_year', 'academic_level', 'major', 'birthday', 'bio', 'heard_about', 'subscribed']:
                 if field in request.form:
                     data[field] = request.form[field]
             
@@ -391,7 +411,7 @@ def update_user(user_id):
             data = request.get_json()
         
         # Only update fields that exist in the model
-        valid_fields = ['profile_image', 'name', 'email', 'phone', 'points', 'interests', 'admin', 'gender', 'graduation_year', 'academic_level', 'major', 'birthday', 'bio', 'car_seats']
+        valid_fields = ['profile_image', 'name', 'email', 'phone', 'points', 'interests', 'admin', 'gender', 'graduation_year', 'academic_level', 'major', 'birthday', 'bio', 'car_seats', 'heard_about', 'subscribed']
         for field in valid_fields:
             if field in data:
                 if field == 'birthday':
@@ -463,7 +483,9 @@ def get_users_csv():
             'registration_date',
             'graduation_year',
             'has_bio',
-            'has_profile_image'
+            'has_profile_image',
+            'heard_about',
+            'subscribed'
         ])
 
         for user in users:
@@ -479,6 +501,8 @@ def get_users_csv():
             graduation_year = user.graduation_year or ''
             has_bio = bool(user.bio)
             has_profile_image = bool(user.profile_image)
+            heard_about = user.heard_about or ''
+            subscribed = user.subscribed
 
             writer.writerow([
                 friend_count,
@@ -492,6 +516,8 @@ def get_users_csv():
                 graduation_year,
                 int(has_bio),
                 int(has_profile_image),
+                heard_about,
+                subscribed
             ])
 
         output = si.getvalue()
