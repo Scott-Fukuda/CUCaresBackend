@@ -1,8 +1,16 @@
+import logging
 import os
 from dotenv import load_dotenv
 
 # Load environment variables from .env file FIRST
 load_dotenv()
+
+# So `logging.getLogger(__name__).info(...)` and Flask loggers show in the terminal
+# (stdout `print` can be line-buffered and look "missing" when Flask runs under Cursor/IDE).
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 
 from flask_migrate import Migrate
 from config import StagingConfig
